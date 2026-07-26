@@ -1,0 +1,44 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.cache
+*.pid
+tmp/
+temp/
+
+# Local build, test, and generated output
+node_modules/
+dist/
+build/
+coverage/
+outputs/
+work/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+service-account*.json
+
+# Local save data and exported diagnostics
+*localStorage*.json
+*-save.json
+debug/
