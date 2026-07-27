@@ -16,6 +16,8 @@
   <script src="js/game.js"></script>
   <script src="js/achievement.js"></script>
   <script src="js/quest.js"></script>
+  <script src="js/story.js"></script>
+  <script src="js/ending.js"></script>
   <script src="js/save.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/effect.js"></script>
@@ -32,6 +34,8 @@
       } : undefined);
       EbiAR.game.connectSystems();
       EbiAR.ui.init();
+      EbiAR.Story.initialize(saved && saved.story);
+      EbiAR.Ending.initialize(saved && saved.ending);
       EbiAR.events.on('ui:start-requested', function () {
         EbiAR.sound.unlock();
         EbiAR.sound.playBgm('adventure', { fadeMs: 300 });

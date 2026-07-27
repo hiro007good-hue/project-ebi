@@ -179,6 +179,8 @@
     unsubscribe.push(EbiAR.events.on('achievement:unlock', function (event) { showMessage('実績解除：' + (event.achievement && event.achievement.title || '')); }));
     unsubscribe.push(EbiAR.events.on('quest:error', function () { showMessage('クエスト処理でエラーが発生しました。'); }));
     unsubscribe.push(EbiAR.events.on('achievement:error', function () { showMessage('実績処理でエラーが発生しました。'); }));
+    unsubscribe.push(EbiAR.events.on('story:start', function (event) { showMessage('ストーリー開始：' + (event.story && event.story.title || '')); }));
+    unsubscribe.push(EbiAR.events.on('story:complete', function (event) { showMessage('ストーリー完了：' + (event.story && event.story.title || '')); }));
   }
 
   /** UIを初期化し、タイトル画面を表示する。 */

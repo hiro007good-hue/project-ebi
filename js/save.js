@@ -12,7 +12,7 @@
   var MAX_GPS_HISTORY = 20;
   var autoSaveTimer = null;
   var gpsHistory = [];
-  var extras = { coupons: [], quest: null, achievement: null, settings: {} };
+  var extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {} };
 
   /** 保存に失敗した際に、呼び出し側が原因を識別できるエラー。 */
   function SaveError(code, message, cause) {
@@ -82,6 +82,8 @@
       coupons: clone(character.coupons || extras.coupons),
       quest: EbiAR.Quest && typeof EbiAR.Quest.exportState === 'function' ? EbiAR.Quest.exportState() : clone(extras.quest),
       achievement: EbiAR.Achievement && typeof EbiAR.Achievement.exportState === 'function' ? EbiAR.Achievement.exportState() : clone(extras.achievement),
+      story: EbiAR.Story && typeof EbiAR.Story.exportState === 'function' ? EbiAR.Story.exportState() : clone(extras.story),
+      ending: EbiAR.Ending && typeof EbiAR.Ending.exportState === 'function' ? EbiAR.Ending.exportState() : clone(extras.ending),
       settings: clone(extras.settings),
       gpsHistory: normalizeGpsHistory(gpsHistory)
     };
@@ -108,6 +110,8 @@
       achievement: data.achievement && typeof data.achievement === 'object'
         ? clone(data.achievement)
         : (data.achievements && !Array.isArray(data.achievements) ? clone(data.achievements) : null),
+      story: data.story && typeof data.story === 'object' ? clone(data.story) : null,
+      ending: data.ending && typeof data.ending === 'object' ? clone(data.ending) : null,
       settings: data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) ? clone(data.settings) : {},
       gpsHistory: normalizeGpsHistory(data.gpsHistory)
     };
@@ -145,6 +149,8 @@
       coupons: clone(data.coupons),
       quest: clone(data.quest),
       achievement: clone(data.achievement),
+      story: clone(data.story),
+      ending: clone(data.ending),
       settings: clone(data.settings)
     };
     gpsHistory = normalizeGpsHistory(data.gpsHistory);
@@ -204,7 +210,7 @@
       throw new SaveError('reset_failed', 'セーブデータを削除できませんでした。', error);
     }
     gpsHistory = [];
-    extras = { coupons: [], quest: null, achievement: null, settings: {} };
+    extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {} };
     if (EbiAR.events) EbiAR.events.emit('save:reset');
   }
 
