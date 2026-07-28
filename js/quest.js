@@ -48,7 +48,7 @@
       title: 'エビ丸を見つけよう',
       description: 'エビ丸を取得しよう',
       prerequisite: 'visit-hamada',
-      condition: { type: CONDITION.CHARACTER, value: 'ebimaru', target: 1 },
+      condition: { type: CONDITION.CHARACTER, value: 'ebi-maru', target: 1 },
       rewards: { points: 300, experience: 150, coins: 30 }
     },
     {
@@ -56,7 +56,7 @@
       title: '商人の町',
       description: '近江日野商人館を訪問しよう',
       prerequisite: 'find-ebimaru',
-      condition: { type: CONDITION.SPOT_VISIT, value: 'merchant-museum', target: 1 },
+      condition: { type: CONDITION.SPOT_VISIT, value: 'omi-hino-merchant-museum', target: 1 },
       rewards: { points: 300, experience: 150, coins: 30 }
     },
     {
@@ -64,7 +64,7 @@
       title: '神社巡り',
       description: '綿向神社を訪問しよう',
       prerequisite: 'merchant-town',
-      condition: { type: CONDITION.SPOT_VISIT, value: 'watamuki-shrine', target: 1 },
+      condition: { type: CONDITION.SPOT_VISIT, value: 'umamioka-watamuki-shrine', target: 1 },
       rewards: {
         points: 400,
         experience: 200,
@@ -489,6 +489,14 @@
       EbiAR.events.on('character:levelup', (detail) => this.update(CONDITION.LEVEL, { level: detail?.character?.level }));
       EbiAR.events.on('game:points-changed', (detail) => this.update(CONDITION.POINTS, detail));
       EbiAR.events.on('save:loaded', (data) => this.restoreState(data?.quest));
+      EbiAR.events.on('save:reset', () => {
+        this.quests.forEach((quest, id) => {
+          this.state[id] = { status: STATUS.NOT_STARTED, progress: 0 };
+        });
+        try { this.storage?.removeItem(this.storageKey); } catch { /* Save Engine側で通知済み */ }
+        this.start('welcome-hino');
+        this.#render();
+      });
     }
 
     #render() {

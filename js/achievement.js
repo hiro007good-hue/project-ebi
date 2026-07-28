@@ -40,7 +40,7 @@
       id: 'find-ebimaru',
       title: 'エビ丸発見',
       description: 'レアキャラクター「エビ丸」を見つける',
-      condition: { type: CONDITION.RARE_CHARACTER, value: 'ebimaru', target: 1 },
+      condition: { type: CONDITION.RARE_CHARACTER, value: 'ebi-maru', target: 1 },
       rewards: { points: 300, experience: 150, coins: 30, title: 'エビ丸の友' }
     },
     {
@@ -533,6 +533,22 @@
         });
       });
       EbiAR.events.on('save:loaded', (data) => this.restoreState(data?.achievement));
+      EbiAR.events.on('save:reset', () => {
+        this.achievements.forEach((achievement, id) => {
+          this.state[id] = { status: STATUS.LOCKED, progress: 0 };
+        });
+        this.metrics = {
+          spots: new Set(),
+          characters: new Set(),
+          quests: new Set(),
+          collection: 0,
+          level: 0,
+          points: 0,
+          gameStarted: false
+        };
+        try { this.storage?.removeItem(this.storageKey); } catch { /* Save Engine側で通知済み */ }
+        this.#render();
+      });
     }
 
     #view(achievement) {

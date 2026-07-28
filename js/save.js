@@ -157,6 +157,16 @@
     return clone(data);
   }
 
+  /** 読み込んだプレイヤー状態を実行中のGame Engineへ反映する。 */
+  function restoreGameState(data) {
+    if (!EbiAR.game || typeof EbiAR.game.initialize !== 'function') return;
+    EbiAR.game.initialize({
+      character: data.player,
+      collectedSpotIds: data.game.collectedSpotIds,
+      startedAt: data.game.startedAt
+    });
+  }
+
   /**
    * 現在のゲーム状態をlocalStorageへ保存する。
    * @param {object} [overrides] クーポン・実績等の追加または上書きデータ
@@ -211,6 +221,7 @@
     }
     gpsHistory = [];
     extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {} };
+    restoreGameState(normalizeData({}));
     if (EbiAR.events) EbiAR.events.emit('save:reset');
   }
 
@@ -231,6 +242,7 @@
     try { storage().setItem(STORAGE_KEY, JSON.stringify(packed)); }
     catch (error) { throw new SaveError('write_failed', 'セーブデータを取り込めませんでした。', error); }
     applyRuntimeData(packed.data);
+    restoreGameState(packed.data);
     if (EbiAR.events) EbiAR.events.emit('save:imported', clone(packed.data));
     if (EbiAR.events) EbiAR.events.emit('save:loaded', clone(packed.data));
     return clone(packed.data);

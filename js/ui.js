@@ -30,7 +30,7 @@
       '.ebi-ui .hud{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:rgba(255,250,242,.94);padding:8px 0;border-bottom:1px solid var(--line)}.ebi-ui .stat{padding:7px;text-align:center;font-size:.78rem}.ebi-ui .stat strong{display:block;font-size:1rem}',
       '.ebi-ui .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:auto;padding-top:20px}.ebi-ui .panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 12px #5d34130d}',
       '.ebi-ui .catalog{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px}.character-card{text-align:left;background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important;min-height:120px}.character-card.locked{opacity:.58;filter:grayscale(1)}.rarity{font-size:.74rem;color:var(--ebi)}',
-      '.ebi-ui .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.toolbar input{flex:1;min-width:160px;padding:.65rem;border:1px solid var(--line);border-radius:10px}.back{align-self:flex-start;background:transparent!important;color:var(--ink)!important;padding:4px!important}',
+      '.ebi-ui .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.toolbar input{flex:1;min-width:160px;padding:.65rem;border:1px solid var(--line);border-radius:10px}.back{align-self:flex-start;min-height:44px;background:transparent!important;color:var(--ink)!important;padding:4px 8px!important}',
       '.ebi-ui .message{position:fixed;z-index:10;left:50%;bottom:20px;transform:translateX(-50%);width:min(92vw,520px);background:#30251d;color:#fff;padding:14px 16px;border-radius:14px;box-shadow:0 8px 30px #0004}.message[hidden]{display:none}.spinner{width:42px;height:42px;border:5px solid #f3d3c1;border-top-color:var(--ebi);border-radius:50%;animation:ebi-spin .8s linear infinite}',
       '.ebi-ui .fade-out{opacity:0;transition:opacity .2s ease;pointer-events:none}.ebi-ui .fade-in{animation:ebi-fade .25s ease}@keyframes ebi-spin{to{transform:rotate(360deg)}}@keyframes ebi-fade{from{opacity:0}to{opacity:1}}',
       '@media (min-width:700px){#ebi-ui .screen{max-width:820px;margin:auto;padding:28px}.actions{max-width:520px;width:100%;align-self:center}}@media (prefers-reduced-motion:reduce){#ebi-ui *{animation-duration:.01ms!important;transition-duration:.01ms!important}}'
@@ -135,14 +135,10 @@
    * @returns {Array<object>}
    */
   function getSavedCoupons() {
-    if (!EbiAR.save || typeof EbiAR.save.loadGame !== 'function') return [];
-    try {
-      var saved = EbiAR.save.loadGame();
-      return saved && Array.isArray(saved.coupons) ? saved.coupons : [];
-    } catch (error) {
-      console.warn('クーポンの保存データを読み込めませんでした。', error);
-      return [];
-    }
+    var state = EbiAR.game && typeof EbiAR.game.getState === 'function'
+      ? EbiAR.game.getState()
+      : null;
+    return state && Array.isArray(state.character?.coupons) ? state.character.coupons : [];
   }
 
   function renderCoupons(coupons) {
@@ -150,7 +146,7 @@
     var values = coupons || getSavedCoupons();
     target.replaceChildren();
     if (!values.length) { target.textContent = '利用できるクーポンはありません。'; return; }
-    values.forEach(function (coupon) { var row = document.createElement('p'); row.textContent = coupon.name || coupon.id || 'クーポン'; target.appendChild(row); });
+    values.forEach(function (coupon) { var row = document.createElement('p'); row.textContent = typeof coupon === 'string' ? coupon : (coupon.name || coupon.id || 'クーポン'); target.appendChild(row); });
   }
 
   function handleClick(event) {
