@@ -36,7 +36,7 @@
 
   // すべて本作オリジナルのキャラクターです。素材ファイル名は assets 配下と一致させます。
   var CHARACTERS = Object.freeze([
-    definition('ebi-maru', 'えびまる', 'common', AREA_IDS.townHall, '王国の使者を夢見る、まっすぐな海老フライ。', 10),
+    definition('ebi-maru', 'エビ丸', 'common', AREA_IDS.townHall, '王国の使者を夢見る、まっすぐな海老フライ。', 10),
     definition('cabbage-kun', 'キャベツくん', 'common', AREA_IDS.oldTown, '衣の相棒を探して町を歩く、さわやかなキャベツ。', 10),
     definition('lemon-pyon', 'レモンぴょん', 'common', AREA_IDS.park, '酸っぱいひらめきで旅人を応援する案内役。', 10),
     definition('tart-chan', 'タルタルちゃん', 'common', AREA_IDS.park, 'ピクニックが大好きな、ふんわりタルタル。', 10),
@@ -51,9 +51,9 @@
     definition('yamamori', 'やまもり', 'rare', AREA_IDS.foothill, '山の安全を見守る、頼れる森の番人。', 40),
     definition('mizube-queen', 'みずべクイーン', 'rare', AREA_IDS.riverside, '水辺の生き物に詳しい、気品ある女王。', 40),
     definition('festival-ebi', 'まつりえび', 'rare', AREA_IDS.culture, 'にぎやかな音が大好きな、お祭り気分の海老フライ。', 40),
-    definition('castle-crisp', 'しろカリスプ', 'epic', AREA_IDS.culture, '歴史を語り継ぐ、黄金色の守り手。', 70),
+    definition('castle-crisp', '武将えび', 'epic', AREA_IDS.culture, '歴史を語り継ぐ、黄金色の守り手。', 70),
     definition('satoyama-knight', '里山ナイト', 'epic', AREA_IDS.foothill, '自然と人の暮らしの調和を守る騎士。', 70),
-    definition('hino-gold', '日野ゴールド', 'epic', AREA_IDS.west, '夕日に照らされる田園で輝く、幸運の海老フライ。', 70),
+    definition('hino-gold', '黄金えび', 'epic', AREA_IDS.west, '夕日に照らされる田園で輝く、幸運の海老フライ。', 70),
     definition('king-furai', 'フライ王', 'legendary', AREA_IDS.foothill, '王国を治める伝説の海老フライ。礼儀正しい冒険者を待っている。', 120),
     definition('queen-tartar', 'タルタル女王', 'legendary', AREA_IDS.east, '日野町の旅を見守る王国の女王。出会えたら大きな幸運。', 120)
   ]);
@@ -75,16 +75,21 @@
     if (level >= CHARACTER_MAX_LEVEL) return 0;
     return 20 * level;
   }
-  function normalizeRecord(record) {
+  function normalizeRecord(record, preserveMissingAcquiredAt) {
     record = record || {};
-    return { level: Math.max(1, Math.min(CHARACTER_MAX_LEVEL, Number(record.level) || 1)), points: Math.max(0, Math.floor(Number(record.points) || 0)), acquiredAt: record.acquiredAt || now(), updatedAt: now() };
+    return {
+      level: Math.max(1, Math.min(CHARACTER_MAX_LEVEL, Number(record.level) || 1)),
+      points: Math.max(0, Math.floor(Number(record.points) || 0)),
+      acquiredAt: typeof record.acquiredAt === 'string' ? record.acquiredAt : (preserveMissingAcquiredAt ? null : now()),
+      updatedAt: now()
+    };
   }
   function normalizeRecords(records, ids) {
     var result = {};
     (records && typeof records === 'object' ? Object.keys(records) : []).forEach(function (id) {
-      if (ids.indexOf(id) >= 0) result[id] = normalizeRecord(records[id]);
+      if (ids.indexOf(id) >= 0) result[id] = normalizeRecord(records[id], true);
     });
-    ids.forEach(function (id) { if (!result[id]) result[id] = normalizeRecord(); });
+    ids.forEach(function (id) { if (!result[id]) result[id] = normalizeRecord(null, true); });
     return result;
   }
 

@@ -1,9 +1,9 @@
 # Project EBI Version 1.0 アセットマニフェスト
 
-最終監査日: 2026年7月28日
+最終更新日: 2026年7月30日
 対象Build: `20260727.1`
 
-この文書は正式アセットの制作・配置仕様を確定するためのマニフェストです。ダミーアセットは対象外です。現在、`images`、`models`、`sounds`配下に正式ファイルは配置されていませんが、画像・音声の失敗時処理によりゲームはフォールバックで起動できます。
+この文書は正式アセットの制作・配置仕様を確定するためのマニフェストです。ダミーアセットは対象外です。現在、キャラクター正式画像3件が`images/characters`配下に配置済みです。未配置の画像・音声・モデルがあっても、既存の失敗時処理によりゲームはフォールバックで起動できます。
 
 ## 1. 命名・配置規則
 
@@ -27,7 +27,7 @@
 - 推奨容量: 1ファイル300KB以下を目標。画質を損なう場合は500KB程度まで許容
 - アニメーションWebPは使用しない
 
-1024×1024の透過画像は、AR、図鑑カード、詳細画面、Story立ち絵で安全に共用できます。ただし、現在画像を読み込むのはAR画面だけです。図鑑とStoryで共用するには、将来それぞれのUIへ画像表示処理を追加する必要があります。
+1024×1024の透過画像は、AR、図鑑カード、詳細画面、Story立ち絵で安全に共用できます。現在はAR画面と図鑑カード／詳細モーダルが同じ`definition.image`を読み込みます。Story立ち絵は未実装です。
 
 ### スポット
 
@@ -40,11 +40,11 @@
 
 ## 3. 全キャラクター画像・音声・モデル一覧
 
-「AR」は現在`definition.image`を実際に表示します。「図鑑」は名前とレア度のみで画像未使用です。「Story」は会話者名を文字列表示し、立ち絵は未使用です。画像読込失敗時のARフォールバックは🦐表示です。
+「AR」と「図鑑」は現在`definition.image`を実際に表示します。「Story」は会話者名を文字列表示し、立ち絵は未使用です。画像読込失敗時はAR・図鑑とも🦐表示へ切り替わります。
 
 | ID | 表示名 | 画像パス（AR／共用推奨） | 個別音声 | GLBモデル | Story／会話 | 優先度 | 状態 |
 |---|---|---|---|---|---|---|---|
-| `ebi-maru` | えびまる | `images/characters/ebi-maru.webp` | `sounds/characters/ebi-maru.mp3` | `models/ebi-maru.glb` | 主要会話者。現在は名前のみ | A | 未配置 |
+| `ebi-maru` | エビ丸 | `images/characters/ebi-maru.webp` | `sounds/characters/ebi-maru.mp3` | `models/ebi-maru.glb` | 主要会話者。現在は名前のみ | A | 画像配置済み |
 | `cabbage-kun` | キャベツくん | `images/characters/cabbage-kun.webp` | `sounds/characters/cabbage-kun.mp3` | `models/cabbage-kun.glb` | 利用なし | C | 未配置 |
 | `lemon-pyon` | レモンぴょん | `images/characters/lemon-pyon.webp` | `sounds/characters/lemon-pyon.mp3` | `models/lemon-pyon.glb` | 利用なし | C | 未配置 |
 | `tart-chan` | タルタルちゃん | `images/characters/tart-chan.webp` | `sounds/characters/tart-chan.mp3` | `models/tart-chan.glb` | 利用なし | C | 未配置 |
@@ -59,9 +59,9 @@
 | `yamamori` | やまもり | `images/characters/yamamori.webp` | `sounds/characters/yamamori.mp3` | `models/yamamori.glb` | 利用なし | C | 未配置 |
 | `mizube-queen` | みずべクイーン | `images/characters/mizube-queen.webp` | `sounds/characters/mizube-queen.mp3` | `models/mizube-queen.glb` | 利用なし | C | 未配置 |
 | `festival-ebi` | まつりえび | `images/characters/festival-ebi.webp` | `sounds/characters/festival-ebi.mp3` | `models/festival-ebi.glb` | 利用なし | C | 未配置 |
-| `castle-crisp` | しろカリスプ | `images/characters/castle-crisp.webp` | `sounds/characters/castle-crisp.mp3` | `models/castle-crisp.glb` | 利用なし | C | 未配置 |
+| `castle-crisp` | 武将えび | `images/characters/castle-crisp.webp` | `sounds/characters/castle-crisp.mp3` | `models/castle-crisp.glb` | 利用なし | C | 画像配置済み |
 | `satoyama-knight` | 里山ナイト | `images/characters/satoyama-knight.webp` | `sounds/characters/satoyama-knight.mp3` | `models/satoyama-knight.glb` | 利用なし | C | 未配置 |
-| `hino-gold` | 日野ゴールド | `images/characters/hino-gold.webp` | `sounds/characters/hino-gold.mp3` | `models/hino-gold.glb` | Chapter 3の進行対象。現在は立ち絵なし | A | 未配置 |
+| `hino-gold` | 黄金えび | `images/characters/hino-gold.webp` | `sounds/characters/hino-gold.mp3` | `models/hino-gold.glb` | Chapter 3の進行対象。現在は立ち絵なし | A | 画像配置済み |
 | `king-furai` | フライ王 | `images/characters/king-furai.webp` | `sounds/characters/king-furai.mp3` | `models/king-furai.glb` | 利用なし | C | 未配置 |
 | `queen-tartar` | タルタル女王 | `images/characters/queen-tartar.webp` | `sounds/characters/queen-tartar.mp3` | `models/queen-tartar.glb` | 利用なし | C | 未配置 |
 
@@ -73,6 +73,14 @@
 - ARモデル参照パス: `models/{character-id}.glb`
 - キャラクター個別音声: `sounds/characters/{character-id}.mp3`
 - ARモデルは定義済みだが、Version 1.0のAR描画はWebP画像を使用し、GLBはまだ描画しない
+
+### 正式画像3体の統合状態
+
+| character ID | 正式表示名 | 画像パス | 画像配置状態 | 図鑑表示状態 | AR表示状態 | 音声状態 | モデル状態 |
+|---|---|---|---|---|---|---|---|
+| `ebi-maru` | エビ丸 | `images/characters/ebi-maru.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `hino-gold` | 黄金えび | `images/characters/hino-gold.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `castle-crisp` | 武将えび | `images/characters/castle-crisp.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
 
 ## 4. 現在のサウンド一覧
 
@@ -182,8 +190,8 @@
 
 Version 1.0の最低限の制作対象です。
 
-1. `images/characters/ebi-maru.webp`
-2. `images/characters/hino-gold.webp`
+1. `images/characters/ebi-maru.webp`（配置済み）
+2. `images/characters/hino-gold.webp`（配置済み）
 3. `sounds/se-character-found.mp3`
 4. `sounds/se-capture-success.mp3`
 5. `sounds/se-quest-complete.mp3`
@@ -193,7 +201,7 @@ Version 1.0の最低限の制作対象です。
 9. `sounds/bgm-adventure.mp3`
 10. `sounds/bgm-ending.mp3`
 
-このうち1、2、3、7、8、9は既存パスまたは既存定義と一致します。4、5、6、10は新規定義とイベント接続が必要です。`bgm-title.mp3`は定義済みですが再生処理が未接続です。
+Priority Aのキャラクター画像2件は配置済みです。`castle-crisp`も正式画像として配置され、3件とも既存パスのままAR・図鑑へ接続済みです。効果音とBGMは引き続き正式音源の配置が必要です。`bgm-title.mp3`は定義済みですが再生処理が未接続です。
 
 ## 9. Priority B
 
@@ -230,12 +238,11 @@ Version 1.0の最低限の制作対象です。
 - `index.html`またはUI初期化: タイトルBGMの開始・画面遷移時のBGM切替
 - `js/ar.js`: 発見音・到着音・取得音の重複タイミング整理
 - `js/ar.js`: 個別音声を簡易ARでも再生するかの仕様決定
-- `js/ui.js`: 図鑑カードと詳細画面で`entry.image`を表示
 - `js/story.js`: 会話者とcharacter IDの対応付け、および同一画像の立ち絵利用
 - `js/ending.js`: エンディングBGMの開始・終了
 - GLBを使用する場合: `js/ar.js`へWebGL／WebXRレンダラーを別途導入
 
-画像パスを既存IDのまま使用する限り、Priority Aの2画像をARへ表示するためのコード変更は不要です。
+画像パスを既存IDのまま使用する限り、配置済み3画像をAR・図鑑へ表示するための追加コード変更は不要です。
 
 ## 13. JSONマニフェスト案
 
