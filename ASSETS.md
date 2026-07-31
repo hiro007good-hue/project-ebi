@@ -3,7 +3,7 @@
 最終更新日: 2026年7月30日
 対象Build: `20260727.1`
 
-この文書は正式アセットの制作・配置仕様を確定するためのマニフェストです。ダミーアセットは対象外です。現在、キャラクター正式画像3件が`images/characters`配下に配置済みです。未配置の画像・音声・モデルがあっても、既存の失敗時処理によりゲームはフォールバックで起動できます。
+この文書は正式アセットの制作・配置仕様を確定するためのマニフェストです。ダミーアセットは対象外です。現在、全20キャラクターの正式画像が`images/characters`配下に配置済みです。未配置の音声・モデルがあっても、既存の失敗時処理によりゲームはフォールバックで起動できます。
 
 ## 1. 命名・配置規則
 
@@ -45,25 +45,25 @@
 | ID | 表示名 | 画像パス（AR／共用推奨） | 個別音声 | GLBモデル | Story／会話 | 優先度 | 状態 |
 |---|---|---|---|---|---|---|---|
 | `ebi-maru` | エビ丸 | `images/characters/ebi-maru.webp` | `sounds/characters/ebi-maru.mp3` | `models/ebi-maru.glb` | 主要会話者。現在は名前のみ | A | 画像配置済み |
-| `cabbage-kun` | キャベツくん | `images/characters/cabbage-kun.webp` | `sounds/characters/cabbage-kun.mp3` | `models/cabbage-kun.glb` | 利用なし | C | 未配置 |
-| `lemon-pyon` | レモンぴょん | `images/characters/lemon-pyon.webp` | `sounds/characters/lemon-pyon.mp3` | `models/lemon-pyon.glb` | 利用なし | C | 未配置 |
-| `tart-chan` | タルタルちゃん | `images/characters/tart-chan.webp` | `sounds/characters/tart-chan.mp3` | `models/tart-chan.glb` | 利用なし | C | 未配置 |
-| `koromo-pon` | ころもポン | `images/characters/koromo-pon.webp` | `sounds/characters/koromo-pon.mp3` | `models/koromo-pon.glb` | 利用なし | C | 未配置 |
-| `hino-bito` | ひのびと | `images/characters/hino-bito.webp` | `sounds/characters/hino-bito.mp3` | `models/hino-bito.glb` | 利用なし | C | 未配置 |
-| `machi-akari` | まちあかり | `images/characters/machi-akari.webp` | `sounds/characters/machi-akari.mp3` | `models/machi-akari.glb` | 利用なし | C | 未配置 |
-| `kaze-ebi` | かぜえび | `images/characters/kaze-ebi.webp` | `sounds/characters/kaze-ebi.mp3` | `models/kaze-ebi.glb` | 利用なし | C | 未配置 |
-| `midori-furai` | みどりフライ | `images/characters/midori-furai.webp` | `sounds/characters/midori-furai.mp3` | `models/midori-furai.glb` | 利用なし | C | 未配置 |
-| `kawa-taruto` | かわタルト | `images/characters/kawa-taruto.webp` | `sounds/characters/kawa-taruto.mp3` | `models/kawa-taruto.glb` | 利用なし | C | 未配置 |
-| `shonin-ebi` | 商人えび | `images/characters/shonin-ebi.webp` | `sounds/characters/shonin-ebi.mp3` | `models/shonin-ebi.glb` | 利用なし | C | 未配置 |
-| `rail-furai` | レールフライ | `images/characters/rail-furai.webp` | `sounds/characters/rail-furai.mp3` | `models/rail-furai.glb` | 利用なし | C | 未配置 |
-| `yamamori` | やまもり | `images/characters/yamamori.webp` | `sounds/characters/yamamori.mp3` | `models/yamamori.glb` | 利用なし | C | 未配置 |
-| `mizube-queen` | みずべクイーン | `images/characters/mizube-queen.webp` | `sounds/characters/mizube-queen.mp3` | `models/mizube-queen.glb` | 利用なし | C | 未配置 |
-| `festival-ebi` | まつりえび | `images/characters/festival-ebi.webp` | `sounds/characters/festival-ebi.mp3` | `models/festival-ebi.glb` | 利用なし | C | 未配置 |
+| `cabbage-kun` | キャベツくん | `images/characters/cabbage-kun.webp` | `sounds/characters/cabbage-kun.mp3` | `models/cabbage-kun.glb` | 利用なし | C | 画像配置済み |
+| `lemon-pyon` | レモンぴょん | `images/characters/lemon-pyon.webp` | `sounds/characters/lemon-pyon.mp3` | `models/lemon-pyon.glb` | 利用なし | C | 画像配置済み |
+| `tart-chan` | タルタルちゃん | `images/characters/tart-chan.webp` | `sounds/characters/tart-chan.mp3` | `models/tart-chan.glb` | 利用なし | C | 画像配置済み |
+| `koromo-pon` | ころもポン | `images/characters/koromo-pon.webp` | `sounds/characters/koromo-pon.mp3` | `models/koromo-pon.glb` | 利用なし | C | 画像配置済み |
+| `hino-bito` | ひのびと | `images/characters/hino-bito.webp` | `sounds/characters/hino-bito.mp3` | `models/hino-bito.glb` | 利用なし | C | 画像配置済み |
+| `machi-akari` | まちあかり | `images/characters/machi-akari.webp` | `sounds/characters/machi-akari.mp3` | `models/machi-akari.glb` | 利用なし | C | 画像配置済み |
+| `kaze-ebi` | かぜえび | `images/characters/kaze-ebi.webp` | `sounds/characters/kaze-ebi.mp3` | `models/kaze-ebi.glb` | 利用なし | C | 画像配置済み |
+| `midori-furai` | みどりフライ | `images/characters/midori-furai.webp` | `sounds/characters/midori-furai.mp3` | `models/midori-furai.glb` | 利用なし | C | 画像配置済み |
+| `kawa-taruto` | かわタルト | `images/characters/kawa-taruto.webp` | `sounds/characters/kawa-taruto.mp3` | `models/kawa-taruto.glb` | 利用なし | C | 画像配置済み |
+| `shonin-ebi` | 商人えび | `images/characters/shonin-ebi.webp` | `sounds/characters/shonin-ebi.mp3` | `models/shonin-ebi.glb` | 利用なし | C | 画像配置済み |
+| `rail-furai` | レールフライ | `images/characters/rail-furai.webp` | `sounds/characters/rail-furai.mp3` | `models/rail-furai.glb` | 利用なし | C | 画像配置済み |
+| `yamamori` | やまもり | `images/characters/yamamori.webp` | `sounds/characters/yamamori.mp3` | `models/yamamori.glb` | 利用なし | C | 画像配置済み |
+| `mizube-queen` | みずべクイーン | `images/characters/mizube-queen.webp` | `sounds/characters/mizube-queen.mp3` | `models/mizube-queen.glb` | 利用なし | C | 画像配置済み |
+| `festival-ebi` | まつりえび | `images/characters/festival-ebi.webp` | `sounds/characters/festival-ebi.mp3` | `models/festival-ebi.glb` | 利用なし | C | 画像配置済み |
 | `castle-crisp` | 武将えび | `images/characters/castle-crisp.webp` | `sounds/characters/castle-crisp.mp3` | `models/castle-crisp.glb` | 利用なし | C | 画像配置済み |
-| `satoyama-knight` | 里山ナイト | `images/characters/satoyama-knight.webp` | `sounds/characters/satoyama-knight.mp3` | `models/satoyama-knight.glb` | 利用なし | C | 未配置 |
+| `satoyama-knight` | 里山ナイト | `images/characters/satoyama-knight.webp` | `sounds/characters/satoyama-knight.mp3` | `models/satoyama-knight.glb` | 利用なし | C | 画像配置済み |
 | `hino-gold` | 黄金えび | `images/characters/hino-gold.webp` | `sounds/characters/hino-gold.mp3` | `models/hino-gold.glb` | Chapter 3の進行対象。現在は立ち絵なし | A | 画像配置済み |
-| `king-furai` | フライ王 | `images/characters/king-furai.webp` | `sounds/characters/king-furai.mp3` | `models/king-furai.glb` | 利用なし | C | 未配置 |
-| `queen-tartar` | タルタル女王 | `images/characters/queen-tartar.webp` | `sounds/characters/queen-tartar.mp3` | `models/queen-tartar.glb` | 利用なし | C | 未配置 |
+| `king-furai` | フライ王 | `images/characters/king-furai.webp` | `sounds/characters/king-furai.mp3` | `models/king-furai.glb` | 利用なし | C | 画像配置済み |
+| `queen-tartar` | タルタル女王 | `images/characters/queen-tartar.webp` | `sounds/characters/queen-tartar.mp3` | `models/queen-tartar.glb` | 利用なし | C | 画像配置済み |
 
 ### 用途別の現在値
 
@@ -74,13 +74,30 @@
 - キャラクター個別音声: `sounds/characters/{character-id}.mp3`
 - ARモデルは定義済みだが、Version 1.0のAR描画はWebP画像を使用し、GLBはまだ描画しない
 
-### 正式画像3体の統合状態
+### 正式画像20体の統合状態
 
 | character ID | 正式表示名 | 画像パス | 画像配置状態 | 図鑑表示状態 | AR表示状態 | 音声状態 | モデル状態 |
 |---|---|---|---|---|---|---|---|
 | `ebi-maru` | エビ丸 | `images/characters/ebi-maru.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
-| `hino-gold` | 黄金えび | `images/characters/hino-gold.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `cabbage-kun` | キャベツくん | `images/characters/cabbage-kun.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `lemon-pyon` | レモンぴょん | `images/characters/lemon-pyon.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `tart-chan` | タルタルちゃん | `images/characters/tart-chan.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `koromo-pon` | ころもポン | `images/characters/koromo-pon.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `hino-bito` | ひのびと | `images/characters/hino-bito.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `machi-akari` | まちあかり | `images/characters/machi-akari.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `kaze-ebi` | かぜえび | `images/characters/kaze-ebi.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `midori-furai` | みどりフライ | `images/characters/midori-furai.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `kawa-taruto` | かわタルト | `images/characters/kawa-taruto.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `shonin-ebi` | 商人えび | `images/characters/shonin-ebi.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `rail-furai` | レールフライ | `images/characters/rail-furai.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `yamamori` | やまもり | `images/characters/yamamori.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `mizube-queen` | みずべクイーン | `images/characters/mizube-queen.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `festival-ebi` | まつりえび | `images/characters/festival-ebi.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
 | `castle-crisp` | 武将えび | `images/characters/castle-crisp.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `satoyama-knight` | 里山ナイト | `images/characters/satoyama-knight.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `hino-gold` | 黄金えび | `images/characters/hino-gold.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `king-furai` | フライ王 | `images/characters/king-furai.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
+| `queen-tartar` | タルタル女王 | `images/characters/queen-tartar.webp` | 配置済み（1024×1024 WebP・透過・sRGB） | カード／詳細で表示 | 表示確認済み | 未配置・フォールバック | 未配置・画像ARを使用 |
 
 ## 4. 現在のサウンド一覧
 
@@ -201,7 +218,7 @@ Version 1.0の最低限の制作対象です。
 9. `sounds/bgm-adventure.mp3`
 10. `sounds/bgm-ending.mp3`
 
-Priority Aのキャラクター画像2件は配置済みです。`castle-crisp`も正式画像として配置され、3件とも既存パスのままAR・図鑑へ接続済みです。効果音とBGMは引き続き正式音源の配置が必要です。`bgm-title.mp3`は定義済みですが再生処理が未接続です。
+全20キャラクターの正式画像は、既存パスのままAR・図鑑へ接続済みです。効果音とBGMは引き続き正式音源の配置が必要です。`bgm-title.mp3`は定義済みですが再生処理が未接続です。
 
 ## 9. Priority B
 

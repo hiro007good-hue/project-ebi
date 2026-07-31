@@ -26,6 +26,9 @@ coverage/
 outputs/
 work/
 
+# Local source artwork (not part of the release package)
+/assets/source/
+
 # Local environment and credentials
 .env
 .env.*
