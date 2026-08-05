@@ -111,6 +111,7 @@
     var next = byId('screen-' + name);
     if (!next) return false;
     var previous = byId('screen-' + currentScreen);
+    if (currentScreen === 'catalog' && name !== 'catalog') { closeCharacterDetail(); stopBlinkingImages(previous); }
     if (previous && previous !== next) { previous.classList.remove('active'); previous.classList.add('fade-out'); }
     next.classList.remove('fade-out'); next.classList.add('active', 'fade-in');
     global.setTimeout(function () { next.classList.remove('fade-in'); if (previous) previous.classList.remove('fade-out'); }, 250);
@@ -151,6 +152,10 @@
     return Math.max(0, catalog.findIndex(function (item) { return item.id === id; })) + 1;
   }
   function formatCatalogNumber(id) { return String(catalogNumber(id)).padStart(3, '0'); }
+  function stopBlinkingImages(container) {
+    if (!container || !EbiAR.Blink) return;
+    Array.from(container.querySelectorAll('img')).forEach(function (image) { EbiAR.Blink.stop(image); });
+  }
   /** 正式画像と読込失敗時の共通フォールバックを生成する。 */
   function createCharacterImage(entry, large) {
     var frame = document.createElement('div'); frame.className = 'catalog-image' + (entry.isAcquired ? '' : ' is-locked') + (large ? ' is-large' : '');
@@ -161,6 +166,7 @@
     if (entry.image && !failedCharacterImages.has(entry.image)) image.src = entry.image;
     else showFallback();
     frame.append(image, fallback);
+    if (entry.image && !failedCharacterImages.has(entry.image) && EbiAR.Blink) EbiAR.Blink.start(image, entry.id);
     return frame;
   }
   function rarityLabel(entry) {
@@ -170,6 +176,7 @@
   /** 検索・発見状態・並び順を反映して図鑑一覧を再描画する。 */
   function renderCatalog() {
     var list = byId('catalog-list'); if (!list) return;
+    stopBlinkingImages(list);
     list.replaceChildren();
     var player = characterState();
     var query = byId('catalog-search') ? byId('catalog-search').value : '';
@@ -212,7 +219,7 @@
     var panel = byId('character-detail'); var modal = byId('character-modal'); if (!panel || !modal || !EbiAR.character) return;
     var entry = EbiAR.character.getCatalogEntry(characterState(), id);
     if (!entry) return;
-    panel.replaceChildren();
+    stopBlinkingImages(panel); panel.replaceChildren();
     var number = document.createElement('span'); number.className = 'catalog-number'; number.textContent = '図鑑 No.' + formatCatalogNumber(entry.id);
     var heading = document.createElement('h2'); heading.id = 'character-detail-title'; heading.textContent = entry.isAcquired ? entry.name : '？？？';
     var rarity = document.createElement('p'); rarity.className = 'rarity'; rarity.textContent = rarityLabel(entry);
@@ -230,6 +237,7 @@
   /** 詳細モーダルを閉じ、開く前の要素へフォーカスを戻す。 */
   function closeCharacterDetail() {
     var modal = byId('character-modal'); if (!modal || modal.hidden) return false;
+    stopBlinkingImages(byId('character-detail'));
     modal.hidden = true;
     if (lastFocusedElement && lastFocusedElement.isConnected && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus();
     lastFocusedElement = null;
@@ -323,6 +331,7 @@
     unsubscribe.forEach(function (off) { off(); }); unsubscribe = [];
     document.removeEventListener('keydown', handleKeydown);
     if (root) {
+      stopBlinkingImages(root);
       root.removeEventListener('click', handleClick);
       root.removeEventListener('change', handleChange);
       root.removeEventListener('input', handleInput);

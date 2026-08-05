@@ -85,6 +85,7 @@
     dom.image.hidden = false; dom.characterFallback.hidden = true;
     dom.image.onerror = function () { dom.image.hidden = true; dom.characterFallback.hidden = false; };
     dom.image.src = definition.image || '';
+    if (EbiAR.Blink) EbiAR.Blink.start(dom.image, definition.id);
     dom.stage.classList.remove('is-captured');
     dom.stage.classList.add('is-appearing');
     global.setTimeout(function () { if (dom) dom.stage.classList.remove('is-appearing'); }, 420);
@@ -159,6 +160,7 @@
   function isRunning() { return state === STATES.RUNNING || state === STATES.CAPTURING || state === STATES.CAPTURED; }
   /** AR画面とカメラストリームを完全に終了する。 */
   function stop() {
+    if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
     if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } return; }
     if (state === STATES.STOPPING) return;
     changeState(STATES.STOPPING); stopTracks();
