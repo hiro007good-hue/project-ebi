@@ -12,10 +12,10 @@ body { margin: 0; min-height: 100svh; }
 .ar-header div { display: grid; }
 .ar-header span, #ar-character-rarity { font-size: .78rem; opacity: .9; }
 .ar-icon-button { width: 46px; height: 46px; padding: 0; border: 1px solid #ffffff88; border-radius: 50%; background: #1a130dbb; color: #fff; font-size: 1.8rem; }
-.ar-character-stage { position: absolute; z-index: 2; top: 20%; left: 50%; width: min(58vw, 320px); aspect-ratio: 1; transform: translateX(-50%); display: grid; place-items: center; outline: none; animation: ar-float 3.2s ease-in-out infinite; }
+.ar-character-stage { position: absolute; z-index: 2; top: 20%; left: 50%; width: min(58vw, 320px); aspect-ratio: 1; transform: translateX(-50%); display: grid; place-items: center; outline: none; }
 .ar-character-stage img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 15px #0009); user-select: none; -webkit-user-drag: none; }
 .ar-character-fallback { width: 75%; height: 75%; display: grid; place-items: center; border-radius: 50%; font-size: clamp(5rem, 25vw, 10rem); background: #fff8; box-shadow: 0 0 36px #fff; }
-.ar-character-stage.is-appearing { animation: ar-appear .42s ease-out, ar-float 3.2s .42s ease-in-out infinite; }
+.ar-character-stage.is-appearing { animation: ar-appear .42s ease-out; }
 .ar-character-stage.is-capturing { animation: ar-bounce .24s ease-out; }
 .ar-character-stage.is-captured { opacity: 0; transform: translateX(-50%) scale(1.8); transition: opacity .5s ease, transform .5s ease; filter: brightness(2); }
 .ar-panel { position: absolute; z-index: 3; left: 12px; right: 12px; bottom: max(112px, calc(92px + env(safe-area-inset-bottom))); padding: 14px; border: 1px solid #ffffff44; border-radius: 18px; background: linear-gradient(110deg, #1d130ae8, #362113d9); backdrop-filter: blur(8px); box-shadow: 0 6px 24px #0006; }
@@ -33,8 +33,20 @@ body { margin: 0; min-height: 100svh; }
 .ar-discovery strong { font-size: 1.45rem; }
 .ar-discovery button { width: min(100%, 340px); min-height: 58px; border: 0; border-radius: 15px; background: #fff; color: #b73e10; font-size: 1.1rem; font-weight: 800; }
 .ar-discovery .ar-secondary { background: transparent; border: 1px solid #ffffff99; color: #fff; }
-@keyframes ar-float { 0%,100% { margin-top: 0; rotate: -2deg; } 50% { margin-top: -18px; rotate: 2deg; } }
 @keyframes ar-appear { from { opacity: 0; transform: translateX(-50%) scale(.35); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
 @keyframes ar-bounce { 50% { transform: translateX(-50%) scale(.88); } }
+
+/* 待機演出：配置・背景・画像srcからtransformの責務を分離する */
+.character-idle, .character-idle-float, .character-idle-sway, .character-idle-jump { width: 100%; height: 100%; display: grid; place-items: center; }
+.ar-character-stage > .character-idle, .catalog-image > .character-idle { position: absolute; inset: 0; }
+.character-idle-float, .character-idle-sway, .character-idle-jump { transform-origin: 50% 82%; }
+.character-idle.is-idle-active > .character-idle-float { animation: character-idle-float var(--idle-float-duration,3.4s) var(--idle-float-delay,0s) ease-in-out infinite; }
+.character-idle.is-idle-active.is-idle-sway-enabled > .character-idle-float > .character-idle-sway { animation: character-idle-sway var(--idle-sway-duration,4.5s) var(--idle-sway-delay,0s) ease-in-out infinite; }
+.character-idle-jump.is-idle-jumping { animation: character-idle-jump var(--idle-jump-duration,500ms) ease-out 1; }
+.character-idle.is-idle-paused .character-idle-float, .character-idle.is-idle-paused .character-idle-sway, .character-idle.is-idle-paused .character-idle-jump { animation: none !important; transform: none !important; }
+@keyframes character-idle-float { 0%,100% { transform: translateY(var(--idle-float-up,-2px)); } 50% { transform: translateY(var(--idle-float-down,2px)); } }
+@keyframes character-idle-sway { 0%,100% { transform: var(--idle-sway-left,translateX(-1px) rotate(-1deg)); } 50% { transform: var(--idle-sway-right,translateX(1px) rotate(1deg)); } }
+@keyframes character-idle-jump { 0%,100% { transform: translateY(0) scaleY(1); } 45% { transform: translateY(var(--idle-jump-height,-10px)) scaleY(1); } 78% { transform: translateY(1px) scaleY(.97); } }
+
 @media (min-width: 700px) { .ar-panel { left: 50%; right: auto; width: min(520px, calc(100vw - 32px)); transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .ar-character-stage, .ar-character-stage.is-appearing, .ar-character-stage.is-capturing { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ar-character-stage, .ar-character-stage.is-appearing, .ar-character-stage.is-capturing, .character-idle-float, .character-idle-sway, .character-idle-jump { animation: none !important; transform: none !important; } }

@@ -41,9 +41,9 @@
     if (dom) return dom;
     if (!global.document || !global.document.body) throw new Error('AR画面を作成できません。');
     var root = document.createElement('section'); root.id = 'ebi-ar'; root.className = 'ebi-ar'; root.hidden = true;
-    root.innerHTML = '<video id="ar-video" autoplay muted playsinline></video><div id="ar-fallback" class="ar-fallback" hidden></div><header class="ar-header"><button type="button" id="ar-close" class="ar-icon-button" aria-label="ARを閉じる">×</button><div><strong id="ar-spot-name">海老フライ王国AR</strong><span id="ar-mode-label"></span></div></header><div id="ar-character-stage" class="ar-character-stage" role="button" tabindex="0" aria-label="キャラクターをつかまえる"><img id="ar-character-image" alt=""><div id="ar-character-fallback" class="ar-character-fallback" hidden>🦐</div></div><aside class="ar-panel"><div><strong id="ar-character-name">キャラクターを探そう</strong><span id="ar-character-rarity"></span></div><p id="ar-message">安全な場所に立ち止まって、画面の中から探そう。</p><div class="ar-actions"><button type="button" id="ar-capture">つかまえる</button><button type="button" id="ar-photo" class="ar-secondary">写真を撮る</button></div></aside><p class="ar-safety">歩きながら画面を操作しないでください。<br>安全な場所に立ち止まって遊びましょう。<br>私有地や立入禁止区域には入らないでください。</p><div id="ar-error" class="ar-error" hidden></div><section id="ar-discovery" class="ar-discovery" hidden><p>スポットで気配を感じる…</p><h2>海老を発見！</h2><strong id="ar-discovery-name"></strong><p id="ar-discovery-rarity"></p><button type="button" id="ar-search">ARで探す</button><button type="button" id="ar-discovery-close" class="ar-secondary">あとで探す</button></section>';
+    root.innerHTML = '<video id="ar-video" autoplay muted playsinline></video><div id="ar-fallback" class="ar-fallback" hidden></div><header class="ar-header"><button type="button" id="ar-close" class="ar-icon-button" aria-label="ARを閉じる">×</button><div><strong id="ar-spot-name">海老フライ王国AR</strong><span id="ar-mode-label"></span></div></header><div id="ar-character-stage" class="ar-character-stage" role="button" tabindex="0" aria-label="キャラクターをつかまえる"><div id="ar-character-idle" class="character-idle"><div class="character-idle-float"><div class="character-idle-sway"><div class="character-idle-jump"><img id="ar-character-image" alt=""><div id="ar-character-fallback" class="ar-character-fallback" hidden>🦐</div></div></div></div></div></div><aside class="ar-panel"><div><strong id="ar-character-name">キャラクターを探そう</strong><span id="ar-character-rarity"></span></div><p id="ar-message">安全な場所に立ち止まって、画面の中から探そう。</p><div class="ar-actions"><button type="button" id="ar-capture">つかまえる</button><button type="button" id="ar-photo" class="ar-secondary">写真を撮る</button></div></aside><p class="ar-safety">歩きながら画面を操作しないでください。<br>安全な場所に立ち止まって遊びましょう。<br>私有地や立入禁止区域には入らないでください。</p><div id="ar-error" class="ar-error" hidden></div><section id="ar-discovery" class="ar-discovery" hidden><p>スポットで気配を感じる…</p><h2>海老を発見！</h2><strong id="ar-discovery-name"></strong><p id="ar-discovery-rarity"></p><button type="button" id="ar-search">ARで探す</button><button type="button" id="ar-discovery-close" class="ar-secondary">あとで探す</button></section>';
     document.body.appendChild(root);
-    dom = { root: root, video: root.querySelector('#ar-video'), fallback: root.querySelector('#ar-fallback'), stage: root.querySelector('#ar-character-stage'), image: root.querySelector('#ar-character-image'), characterFallback: root.querySelector('#ar-character-fallback'), capture: root.querySelector('#ar-capture'), photo: root.querySelector('#ar-photo'), close: root.querySelector('#ar-close'), discovery: root.querySelector('#ar-discovery'), search: root.querySelector('#ar-search'), discoveryClose: root.querySelector('#ar-discovery-close') };
+    dom = { root: root, video: root.querySelector('#ar-video'), fallback: root.querySelector('#ar-fallback'), stage: root.querySelector('#ar-character-stage'), idle: root.querySelector('#ar-character-idle'), image: root.querySelector('#ar-character-image'), characterFallback: root.querySelector('#ar-character-fallback'), capture: root.querySelector('#ar-capture'), photo: root.querySelector('#ar-photo'), close: root.querySelector('#ar-close'), discovery: root.querySelector('#ar-discovery'), search: root.querySelector('#ar-search'), discoveryClose: root.querySelector('#ar-discovery-close') };
     dom.close.addEventListener('click', stop);
     dom.capture.addEventListener('click', capture);
     dom.photo.addEventListener('click', function () { takePhoto().catch(showError); });
@@ -83,9 +83,14 @@
     byId('ar-character-rarity').textContent = rarity ? rarity.name : definition.rarity;
     dom.image.alt = definition.name;
     dom.image.hidden = false; dom.characterFallback.hidden = true;
-    dom.image.onerror = function () { dom.image.hidden = true; dom.characterFallback.hidden = false; };
+    dom.image.onerror = function () {
+      dom.image.hidden = true;
+      dom.characterFallback.hidden = false;
+      if (EbiAR.idle) EbiAR.idle.stop(dom.idle);
+    };
     dom.image.src = definition.image || '';
     if (EbiAR.Blink) EbiAR.Blink.start(dom.image, definition.id);
+    if (EbiAR.idle) EbiAR.idle.start(dom.idle, { mode: 'ar' });
     dom.stage.classList.remove('is-captured');
     dom.stage.classList.add('is-appearing');
     global.setTimeout(function () { if (dom) dom.stage.classList.remove('is-appearing'); }, 420);
@@ -161,6 +166,7 @@
   /** AR画面とカメラストリームを完全に終了する。 */
   function stop() {
     if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
+    if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
     if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } return; }
     if (state === STATES.STOPPING) return;
     changeState(STATES.STOPPING); stopTracks();
@@ -177,6 +183,7 @@
     // captured状態では自動終了まで再捕獲を受け付けない。
     if (state !== STATES.RUNNING || capturing || !characterId) return { ok: false, reason: 'not_ready' };
     capturing = true; changeState(STATES.CAPTURING);
+    if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
     if (dom) { dom.capture.disabled = true; dom.stage.classList.add('is-capturing'); }
     var result;
     try {
@@ -194,6 +201,7 @@
     } finally {
       capturing = false;
       if (dom) { dom.capture.disabled = false; dom.stage.classList.remove('is-capturing'); }
+      if (state === STATES.RUNNING && EbiAR.idle && dom) EbiAR.idle.start(dom.idle, { mode: 'ar' });
     }
   }
 
