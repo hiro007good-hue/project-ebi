@@ -48,5 +48,23 @@ body { margin: 0; min-height: 100svh; }
 @keyframes character-idle-sway { 0%,100% { transform: var(--idle-sway-left,translateX(-1px) rotate(-1deg)); } 50% { transform: var(--idle-sway-right,translateX(1px) rotate(1deg)); } }
 @keyframes character-idle-jump { 0%,100% { transform: translateY(0) scaleY(1); } 45% { transform: translateY(var(--idle-jump-height,-10px)) scaleY(1); } 78% { transform: translateY(1px) scaleY(.97); } }
 
+/* AR写真プレビュー：端末内生成した画像だけを表示し、ARカメラは背面で維持する */
+.ebi-ar.is-photo-flashing::after { content: ''; position: fixed; z-index: 20; inset: 0; pointer-events: none; background: #fff; animation: photo-flash 140ms ease-out forwards; }
+.is-photo-preview-open { overflow: hidden; }
+.photo-preview { position: fixed; z-index: 13000; inset: 0; display: grid; place-items: center; overflow: auto; padding: max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); background: #160e09e8; }
+.photo-preview[hidden] { display: none; }
+.photo-preview-panel { width: min(100%,560px); max-height: calc(100svh - 24px); overflow: auto; border-radius: 20px; background: #fffaf2; color: #271a12; box-shadow: 0 20px 70px #000a; }
+.photo-preview-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; }
+.photo-preview-panel h2 { margin: 0; font-size: 1.05rem; }
+.photo-preview-close { flex: 0 0 46px; width: 46px; min-height: 46px; padding: 0; border-radius: 50%; font-size: 1.5rem; }
+.photo-preview-image-wrap { display: grid; place-items: center; width: 100%; padding: 0 12px; }
+.photo-preview-image-wrap img { display: block; width: min(100%,432px); max-height: calc(100svh - 250px); aspect-ratio: 4/5; object-fit: contain; border-radius: 12px; background: #1b120b; }
+.photo-preview-status { min-height: 2.8em; margin: 8px 16px; color: #675247; font-size: .88rem; }
+.photo-preview-status.is-error { color: #a82920; }
+.photo-preview-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 0 16px 16px; }
+.photo-preview-actions button { min-height: 48px; border: 0; border-radius: 13px; background: #e85d24; color: #fff; font: inherit; font-weight: 800; touch-action: manipulation; }
+.photo-preview-actions .photo-secondary { border: 1px solid #d8c4b5; background: #fff; color: #49382d; }
+.photo-preview button:focus-visible { outline: 3px solid #ffb703; outline-offset: 2px; }
+@keyframes photo-flash { from { opacity: .9; } to { opacity: 0; } }
 @media (min-width: 700px) { .ar-panel { left: 50%; right: auto; width: min(520px, calc(100vw - 32px)); transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .ar-character-stage, .ar-character-stage.is-appearing, .ar-character-stage.is-capturing, .character-idle-float, .character-idle-sway, .character-idle-jump { animation: none !important; transform: none !important; } }
+@media (prefers-reduced-motion: reduce) { .ar-character-stage, .ar-character-stage.is-appearing, .ar-character-stage.is-capturing, .character-idle-float, .character-idle-sway, .character-idle-jump, .ebi-ar.is-photo-flashing::after { animation: none !important; transform: none !important; } }

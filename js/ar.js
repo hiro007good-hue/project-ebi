@@ -165,6 +165,7 @@
   function isRunning() { return state === STATES.RUNNING || state === STATES.CAPTURING || state === STATES.CAPTURED; }
   /** AR画面とカメラストリームを完全に終了する。 */
   function stop() {
+    if (EbiAR.photo) EbiAR.photo.close();
     if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
     if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
     if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } return; }
@@ -205,20 +206,18 @@
     }
   }
 
-  /** カメラ映像・キャラクター・タイトルをGPS情報なしでPNG合成する。 */
+  /** 現在のAR表示をPhotoManagerへ渡し、GPS情報なしでPNG合成する。 */
   function takePhoto() {
     if (!isRunning() || !dom) return Promise.reject(new Error('ARを開始してから写真を撮ってください。'));
-    var definition = character(); var width = dom.video.videoWidth || 1080; var height = dom.video.videoHeight || 1440;
-    var photo = document.createElement('canvas'); photo.width = width; photo.height = height; var ctx = photo.getContext('2d');
-    if (mode === 'camera' && dom.video.readyState >= 2) ctx.drawImage(dom.video, 0, 0, width, height);
-    else { var gradient = ctx.createLinearGradient(0, 0, 0, height); gradient.addColorStop(0, '#75c99a'); gradient.addColorStop(1, '#fff0ca'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height); }
-    function complete() {
-      ctx.fillStyle = 'rgba(0,0,0,.58)'; ctx.fillRect(0, 0, width, 120); ctx.fillStyle = '#fff'; ctx.font = 'bold 42px sans-serif'; ctx.fillText('海老フライ王国AR ～日野町大冒険～', 32, 52); ctx.font = 'bold 34px sans-serif'; ctx.fillText(definition ? definition.name : '海老フライ', 32, 98);
-      return new Promise(function (resolve) { photo.toBlob(function (blob) { if (!blob) { resolve(null); return; } var url = global.URL.createObjectURL(blob); resolve({ blob: blob, url: url, filename: 'ebi-ar-' + Date.now() + '.png', download: function () { var link = document.createElement('a'); link.href = url; link.download = 'ebi-ar-photo.png'; link.click(); }, share: async function () { if (!global.navigator.share || typeof global.File !== 'function') { this.download(); return false; } await global.navigator.share({ title: '海老フライ王国AR', files: [new global.File([blob], 'ebi-ar-photo.png', { type: 'image/png' })] }); return true; } }); }, 'image/png'); });
-    }
-    if (definition && dom.image && !dom.image.hidden && dom.image.complete && dom.image.naturalWidth) { var size = Math.min(width, height) * .42; ctx.drawImage(dom.image, width / 2 - size / 2, height / 2 - size / 2, size, size); }
-    else { ctx.font = '180px sans-serif'; ctx.fillText('🦐', width / 2 - 90, height / 2); }
-    return complete();
+    if (!EbiAR.photo || typeof EbiAR.photo.capture !== 'function') return Promise.reject(new Error('写真機能を準備できません。'));
+    var definition = character();
+    return EbiAR.photo.capture({
+      root: dom.root, video: dom.video, fallback: dom.fallback,
+      characterImage: dom.image, characterFallback: dom.characterFallback,
+      trigger: dom.photo, mode: mode,
+      characterId: definition && definition.id,
+      characterName: definition && definition.name
+    });
   }
   function getState() { return Object.freeze({ state: state, characterId: characterId, mode: mode, running: isRunning(), cameraSupported: supportedCamera(), usingCamera: !!stream, canUseWebXR: !!(global.navigator && global.navigator.xr) }); }
   function on(name, handler) { if (typeof handler !== 'function') return function () {}; (listeners[name] || (listeners[name] = [])).push(handler); return function () { off(name, handler); }; }
