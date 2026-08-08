@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e85d24">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>はま田 GPS位置監査</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --accent: #d94f17;
+      --accent-dark: #a9380d;
+      --background: #fff8ed;
+      --card: #fff;
+      --ink: #2b2119;
+      --muted: #6c625a;
+      --line: #ead8c5;
+      --success: #176b3a;
+      --danger: #a42618;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 0;
+      min-height: 100svh;
+      margin: 0;
+      background: var(--background);
+      color: var(--ink);
+      font: 16px/1.55 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    main {
+      width: min(100%, 680px);
+      margin: 0 auto;
+      padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      color: var(--accent-dark);
+      font-size: clamp(1.55rem, 7vw, 2.25rem);
+      line-height: 1.25;
+    }
+
+    h2 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { margin: 8px 0; }
+
+    .card {
+      margin: 16px 0;
+      padding: 18px;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--card);
+      box-shadow: 0 5px 24px rgb(76 43 17 / 7%);
+    }
+
+    .privacy { color: var(--muted); font-size: .9rem; }
+
+    .status {
+      min-height: 3.2em;
+      padding: 12px;
+      border-radius: 12px;
+      background: #fff0dd;
+      font-weight: 700;
+    }
+
+    .status.error { background: #fff0ed; color: var(--danger); }
+    .status.success { background: #eaf7ef; color: var(--success); }
+
+    dl {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 9px 14px;
+      margin: 14px 0 0;
+    }
+
+    dt { color: var(--muted); }
+    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 750; }
+
+    button {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 12px;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    button:disabled { cursor: default; opacity: .48; }
+    button.secondary { background: #fff; color: var(--accent-dark); border: 2px solid var(--accent); }
+    button:focus-visible { outline: 3px solid #2367a2; outline-offset: 3px; }
+
+    .result {
+      border: 2px solid var(--accent);
+      background: #fffdf9;
+    }
+
+    .result-value {
+      color: var(--accent-dark);
+      font-size: clamp(1rem, 4.6vw, 1.35rem);
+    }
+
+    .inside { color: var(--success); }
+    .outside { color: var(--danger); }
+    [hidden] { display: none !important; }
+
+    @media (max-width: 360px) {
+      .card { padding: 15px; }
+      dl { grid-template-columns: 1fr; gap: 2px; }
+      dd { margin-bottom: 8px; text-align: left; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>はま田 GPS位置監査</h1>
+      <p>店内の現在位置を約30秒測定し、Project EBIの登録地点との差を確認します。</p>
+      <p class="privacy">位置情報はこのブラウザ内だけで計算し、外部送信・保存は行いません。</p>
+    </header>
+
+    <section class="card" aria-labelledby="registered-heading">
+      <h2 id="registered-heading">現在の登録地点</h2>
+      <dl>
+        <dt>スポットID</dt><dd>hamada</dd>
+        <dt>latitude</dt><dd>35.0005000</dd>
+        <dt>longitude</dt><dd>136.2380000</dd>
+        <dt>判定半径</dt><dd>120 m</dd>
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="measurement-heading">
+      <h2 id="measurement-heading">GPS測定</h2>
+      <p id="status" class="status" role="status" aria-live="polite">「測定開始」を押してください。</p>
+      <dl>
+        <dt>取得回数</dt><dd id="sample-count">0 / 10</dd>
+        <dt>latitude</dt><dd id="current-latitude">—</dd>
+        <dt>longitude</dt><dd id="current-longitude">—</dd>
+        <dt>accuracy</dt><dd id="current-accuracy">—</dd>
+        <dt>登録地点まで</dt><dd id="current-distance">—</dd>
+        <dt>120m判定</dt><dd id="current-inside">—</dd>
+      </dl>
+      <button id="start-button" type="button">測定開始</button>
+    </section>
+
+    <section id="result" class="card result" aria-labelledby="result-heading" hidden>
+      <h2 id="result-heading">最良測定値</h2>
+      <dl>
+        <dt>proposedLatitude</dt><dd id="result-latitude" class="result-value">—</dd>
+        <dt>proposedLongitude</dt><dd id="result-longitude" class="result-value">—</dd>
+        <dt>accuracyMeters</dt><dd id="result-accuracy" class="result-value">—</dd>
+        <dt>distanceMeters</dt><dd id="result-distance" class="result-value">—</dd>
+        <dt>insideRegisteredRadius</dt><dd id="result-inside" class="result-value">—</dd>
+        <dt>sampleCount</dt><dd id="result-count" class="result-value">—</dd>
+      </dl>
+      <button id="copy-button" class="secondary" type="button" disabled>結果をコピー</button>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const HAMADA = Object.freeze({
+        id: 'hamada',
+        latitude: 35.0005,
+        longitude: 136.238,
+        radiusMeters: 120
+      });
+      const MEASUREMENT_MS = 30000;
+      const MAX_SAMPLES = 10;
+      const GEOLOCATION_OPTIONS = Object.freeze({
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0
+      });
+
+      const elements = {
+        status: document.querySelector('#status'),
+        start: document.querySelector('#start-button'),
+        copy: document.querySelector('#copy-button'),
+        result: document.querySelector('#result'),
+        sampleCount: document.querySelector('#sample-count'),
+        currentLatitude: document.querySelector('#current-latitude'),
+        currentLongitude: document.querySelector('#current-longitude'),
+        currentAccuracy: document.querySelector('#current-accuracy'),
+        currentDistance: document.querySelector('#current-distance'),
+        currentInside: document.querySelector('#current-inside'),
+        resultLatitude: document.querySelector('#result-latitude'),
+        resultLongitude: document.querySelector('#result-longitude'),
+        resultAccuracy: document.querySelector('#result-accuracy'),
+        resultDistance: document.querySelector('#result-distance'),
+        resultInside: document.querySelector('#result-inside'),
+        resultCount: document.querySelector('#result-count')
+      };
+
+      let watchId = null;
+      let finishTimer = null;
+      let countdownTimer = null;
+      let startedAt = 0;
+      let samples = [];
+      let finalResult = null;
+
+      const toRadians = value => value * Math.PI / 180;
+      const round = (value, digits = 1) => Number(value.toFixed(digits));
+      const isValidCoordinate = (value, minimum, maximum) =>
+        Number.isFinite(value) && value >= minimum && value <= maximum;
+
+      function distanceMeters(from, to) {
+        const earthRadius = 6371000;
+        const dLat = toRadians(to.latitude - from.latitude);
+        const dLng = toRadians(to.longitude - from.longitude);
+        const value =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRadians(from.latitude)) *
+          Math.cos(toRadians(to.latitude)) *
+          Math.sin(dLng / 2) ** 2;
+        return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+      }
+
+      function setStatus(message, type = '') {
+        elements.status.textContent = message;
+        elements.status.className = 'status' + (type ? ' ' + type : '');
+      }
+
+      function setInside(element, inside) {
+        element.textContent = inside ? '判定半径内' : '判定半径外';
+        element.classList.toggle('inside', inside);
+        element.classList.toggle('outside', !inside);
+      }
+
+      function stopTimersAndWatch() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (finishTimer !== null) clearTimeout(finishTimer);
+        if (countdownTimer !== null) clearInterval(countdownTimer);
+        watchId = null;
+        finishTimer = null;
+        countdownTimer = null;
+      }
+
+      function updateCountdown() {
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, Math.ceil((MEASUREMENT_MS - elapsed) / 1000));
+        setStatus(`測定中… 残り約${remaining}秒（${samples.length}件取得）`);
+      }
+
+      function showCurrent(sample) {
+        elements.sampleCount.textContent = `${samples.length} / ${MAX_SAMPLES}`;
+        elements.currentLatitude.textContent = sample.latitude.toFixed(7);
+        elements.currentLongitude.textContent = sample.longitude.toFixed(7);
+        elements.currentAccuracy.textContent = `${round(sample.accuracy)} m`;
+        elements.currentDistance.textContent = `${round(sample.distanceMeters)} m`;
+        setInside(elements.currentInside, sample.insideRegisteredRadius);
+      }
+
+      function finishMeasurement() {
+        stopTimersAndWatch();
+        elements.start.disabled = false;
+        elements.start.textContent = 'もう一度測定';
+
+        if (!samples.length) {
+          setStatus('有効な位置情報を取得できませんでした。屋外に近い場所で再度お試しください。', 'error');
+          return;
+        }
+
+        const best = samples.slice().sort((a, b) => a.accuracy - b.accuracy)[0];
+        finalResult = Object.freeze({
+          proposedLatitude: round(best.latitude, 7),
+          proposedLongitude: round(best.longitude, 7),
+          accuracyMeters: round(best.accuracy),
+          distanceMeters: round(best.distanceMeters),
+          insideRegisteredRadius: best.insideRegisteredRadius,
+          sampleCount: samples.length
+        });
+
+        elements.resultLatitude.textContent = finalResult.proposedLatitude.toFixed(7);
+        elements.resultLongitude.textContent = finalResult.proposedLongitude.toFixed(7);
+        elements.resultAccuracy.textContent = `${finalResult.accuracyMeters} m`;
+        elements.resultDistance.textContent = `${finalResult.distanceMeters} m`;
+        elements.resultCount.textContent = String(finalResult.sampleCount);
+        setInside(elements.resultInside, finalResult.insideRegisteredRadius);
+        elements.result.hidden = false;
+        elements.copy.disabled = false;
+        setStatus('測定が完了しました。accuracyが最も良い値を表示しています。', 'success');
+        elements.result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function handlePosition(position) {
+        if (!position || !position.coords) return;
+        const latitude = Number(position.coords.latitude);
+        const longitude = Number(position.coords.longitude);
+        const accuracy = Number(position.coords.accuracy);
+
+        if (!isValidCoordinate(latitude, -90, 90) ||
+            !isValidCoordinate(longitude, -180, 180) ||
+            !Number.isFinite(accuracy) || accuracy < 0) {
+          setStatus('無効な位置情報を受信しました。測定を続けています。', 'error');
+          return;
+        }
+
+        const distance = distanceMeters({ latitude, longitude }, HAMADA);
+        const sample = Object.freeze({
+          latitude,
+          longitude,
+          accuracy,
+          distanceMeters: distance,
+          insideRegisteredRadius: distance <= HAMADA.radiusMeters,
+          timestamp: position.timestamp || Date.now()
+        });
+
+        samples.push(sample);
+        showCurrent(sample);
+        updateCountdown();
+        if (samples.length >= MAX_SAMPLES) finishMeasurement();
+      }
+
+      function handleError(error) {
+        const messages = {
+          1: '位置情報の利用が許可されていません。iPhoneの設定を確認してください。',
+          2: '現在地を取得できませんでした。屋外に近い場所でお試しください。',
+          3: '位置情報の取得に時間がかかっています。もう一度お試しください。'
+        };
+        stopTimersAndWatch();
+        elements.start.disabled = false;
+        elements.start.textContent = 'もう一度測定';
+        setStatus(messages[error && error.code] || '位置情報の取得中にエラーが発生しました。', 'error');
+      }
+
+      function startMeasurement() {
+        stopTimersAndWatch();
+        samples = [];
+        finalResult = null;
+        startedAt = Date.now();
+        elements.start.disabled = true;
+        elements.start.textContent = '測定中…';
+        elements.copy.disabled = true;
+        elements.result.hidden = true;
+        elements.sampleCount.textContent = `0 / ${MAX_SAMPLES}`;
+
+        if (!('geolocation' in navigator)) {
+          handleError({ code: 2 });
+          return;
+        }
+
+        setStatus('現在地を測定しています。iPhoneを動かさずお待ちください。');
+        watchId = navigator.geolocation.watchPosition(handlePosition, handleError, GEOLOCATION_OPTIONS);
+        countdownTimer = setInterval(updateCountdown, 1000);
+        finishTimer = setTimeout(finishMeasurement, MEASUREMENT_MS);
+      }
+
+      async function copyResult() {
+        if (!finalResult) return;
+        const json = JSON.stringify(finalResult, null, 2);
+        try {
+          await navigator.clipboard.writeText(json);
+        } catch (error) {
+          const area = document.createElement('textarea');
+          area.value = json;
+          area.setAttribute('readonly', '');
+          area.style.position = 'fixed';
+          area.style.opacity = '0';
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand('copy');
+          area.remove();
+        }
+        setStatus('結果をJSON形式でコピーしました。', 'success');
+      }
+
+      elements.start.addEventListener('click', startMeasurement);
+      elements.copy.addEventListener('click', copyResult);
+      window.addEventListener('pagehide', stopTimersAndWatch, { once: true });
+    })();
+  </script>
+</body>
+</html>
