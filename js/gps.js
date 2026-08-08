@@ -8,11 +8,19 @@
   var lastPosition = null;
   var activeSpotIds = {};
   var latestNearbySpots = [];
+  var lowAccuracyRetryStarted = false;
+
+  /** @returns {boolean} 値が指定範囲内の有限な座標か。 */
+  function isValidCoordinate(value, minimum, maximum) {
+    return Number.isFinite(Number(value)) && Number(value) >= minimum && Number(value) <= maximum;
+  }
 
   function toRadians(value) { return value * Math.PI / 180; }
 
   function distanceMeters(from, to) {
-    if (!from || !to || !isFinite(from.latitude) || !isFinite(to.latitude)) return Infinity;
+    if (!from || !to ||
+      !isValidCoordinate(from.latitude, -90, 90) || !isValidCoordinate(to.latitude, -90, 90) ||
+      !isValidCoordinate(from.longitude, -180, 180) || !isValidCoordinate(to.longitude, -180, 180)) return Infinity;
     var earthRadius = 6371000;
     var dLat = toRadians(to.latitude - from.latitude);
     var dLng = toRadians(to.longitude - from.longitude);
@@ -23,10 +31,11 @@
   }
 
   function normalize(position) {
-    var coords = position.coords;
+    var coords = position && position.coords;
+    if (!coords || !isValidCoordinate(coords.latitude, -90, 90) || !isValidCoordinate(coords.longitude, -180, 180)) return null;
     return {
-      latitude: coords.latitude,
-      longitude: coords.longitude,
+      latitude: Number(coords.latitude),
+      longitude: Number(coords.longitude),
       accuracy: Number.isFinite(coords.accuracy) ? coords.accuracy : Infinity,
       altitude: coords.altitude,
       heading: coords.heading,
@@ -36,6 +45,7 @@
   }
 
   function statusFor(point) {
+    if (!point || !isValidCoordinate(point.latitude, -90, 90) || !isValidCoordinate(point.longitude, -180, 180)) return 'unavailable';
     var config = EbiAR.config;
     var distanceFromTown = distanceMeters(point, config.map.townCenter);
     if (point.accuracy > config.gps.minAccuracyMeters) return 'low_accuracy';
@@ -96,10 +106,19 @@
 
   function publish(position) {
     var point = normalize(position);
-    var moved = !lastPosition || distanceMeters(lastPosition, point) >= EbiAR.config.gps.updateDistanceMeters;
-    lastPosition = point;
-    if (!moved) return;
+    if (!point) {
+      publishError({ code: 2 });
+      return;
+    }
     var status = statusFor(point);
+    var previousStatus = lastPosition ? statusFor(lastPosition) : null;
+    var moved = !lastPosition || distanceMeters(lastPosition, point) >= EbiAR.config.gps.updateDistanceMeters;
+    var accuracyImprovement = lastPosition ? lastPosition.accuracy - point.accuracy : Infinity;
+    var accuracyThreshold = lastPosition ? Math.max(5, lastPosition.accuracy * 0.1) : 0;
+    var accuracyImproved = !lastPosition || accuracyImprovement >= accuracyThreshold;
+    var statusChanged = previousStatus !== status;
+    if (!moved && !accuracyImproved && !statusChanged) return;
+    lastPosition = point;
     EbiAR.events.emit('gps:update', { position: point, status: status });
     updateSpotState(point, status);
   }
@@ -110,13 +129,26 @@
       2: '現在地を取得できませんでした。屋外など電波の良い場所でお試しください。',
       3: '位置情報の取得がタイムアウトしました。'
     };
-    var payload = { code: error.code || 0, message: messages[error.code] || '位置情報で予期しないエラーが発生しました。' };
+    var statuses = { 1: 'permission_denied', 2: 'unavailable', 3: 'timeout' };
+    var payload = { code: error.code || 0, status: statuses[error.code] || 'unavailable', message: messages[error.code] || '位置情報で予期しないエラーが発生しました。' };
     EbiAR.events.emit('gps:error', payload);
   }
 
-  function options() {
+  function options(enableHighAccuracy) {
     var gps = EbiAR.config.gps;
-    return { enableHighAccuracy: gps.enableHighAccuracy, timeout: gps.timeoutMs, maximumAge: gps.maximumAgeMs };
+    return { enableHighAccuracy: enableHighAccuracy, timeout: gps.timeoutMs, maximumAge: gps.maximumAgeMs };
+  }
+
+  /** 高精度取得失敗を通知し、権限拒否以外では低精度の単発取得を一度だけ試す。 */
+  function retryWithLowAccuracy(error) {
+    publishError(error);
+    if (!error || error.code === 1 || lowAccuracyRetryStarted || !navigator.geolocation) return;
+    lowAccuracyRetryStarted = true;
+    navigator.geolocation.getCurrentPosition(publish, publishError, options(false));
+  }
+
+  function highAccuracyOptions() {
+    return options(EbiAR.config.gps.enableHighAccuracy);
   }
 
   function start() {
@@ -125,8 +157,9 @@
       return false;
     }
     if (watchId !== null) return true;
-    navigator.geolocation.getCurrentPosition(publish, publishError, options());
-    watchId = navigator.geolocation.watchPosition(publish, publishError, options());
+    lowAccuracyRetryStarted = false;
+    navigator.geolocation.getCurrentPosition(publish, retryWithLowAccuracy, highAccuracyOptions());
+    watchId = navigator.geolocation.watchPosition(publish, retryWithLowAccuracy, highAccuracyOptions());
     EbiAR.events.emit('gps:started');
     return true;
   }
@@ -134,6 +167,7 @@
   function stop() {
     if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
     watchId = null;
+    lowAccuracyRetryStarted = false;
     Object.keys(activeSpotIds).forEach(function (id) { emitSpotLeft(id, lastPosition, 'stopped'); });
     latestNearbySpots = [];
     EbiAR.events.emit('gps:stopped');

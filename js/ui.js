@@ -137,7 +137,38 @@
   function updateLocation(update) {
     if (!update || !update.position) return;
     var accuracy = Math.round(safeNumber(update.position.accuracy));
-    setText('hud-location', update.status === 'ready' ? '精度±' + accuracy + 'm' : '取得中');
+    setText('hud-location', update.status === 'ready' || update.status === 'outside_area' ? '精度±' + accuracy + 'm' : '取得中');
+    renderGpsStatus(update.status);
+  }
+  /** GPS状態と近傍スポットをゲーム画面の案内パネルへ反映する。 */
+  function renderGpsStatus(status, nearbySpots) {
+    var content = {
+      locating: ['現在地を取得しています…', '位置情報を確認しています。', ''],
+      ready: ['現在地を取得しました', '現在地の近くに冒険スポットはありません。', '近くのスポットを探しながら冒険しよう。'],
+      low_accuracy: ['現在地を確認しています…', '屋外など位置情報を取得しやすい場所でお待ちください。', ''],
+      outside_area: ['現在地を取得しました', '日野町の冒険エリア外です。', '日野町に近づくと冒険スポットが表示されます。'],
+      permission_denied: ['位置情報の利用が許可されていません', 'Safariと端末の設定から位置情報を許可してください。', ''],
+      timeout: ['現在地の取得に時間がかかっています', '屋外など位置情報を取得しやすい場所でお待ちください。', ''],
+      unavailable: ['現在地を取得できませんでした', '通信環境と位置情報の設定を確認して、もう一度お試しください。', '']
+    }[status] || null;
+    if (status === 'ready' && nearbySpots && nearbySpots.length) {
+      renderSpot(nearbySpots[0]);
+      return;
+    }
+    if (!content) return;
+    setText('spot-name', content[0]);
+    setText('spot-description', content[1]);
+    setText('spot-guide', content[2]);
+  }
+  function updateGpsSpots(event) {
+    if (!event) return;
+    renderGpsStatus(event.status, event.nearbySpots || []);
+  }
+  function renderGpsError(event) {
+    var status = event && event.status || 'unavailable';
+    renderGpsStatus(status);
+    setText('hud-location', '取得失敗');
+    if (event && event.message) showMessage(event.message);
   }
   function renderSpot(spot) {
     if (!spot) return;
@@ -304,9 +335,11 @@
   function subscribe() {
     if (!EbiAR.events) return;
     unsubscribe.push(EbiAR.events.on('game:state', updateHud));
+    unsubscribe.push(EbiAR.events.on('gps:started', function () { renderGpsStatus('locating'); }));
     unsubscribe.push(EbiAR.events.on('gps:update', updateLocation));
+    unsubscribe.push(EbiAR.events.on('gps:spots-updated', updateGpsSpots));
     unsubscribe.push(EbiAR.events.on('gps:spot-arrived', function (event) { renderSpot(event.spot); showMessage(event.spot.name + ' に到着しました'); }));
-    unsubscribe.push(EbiAR.events.on('gps:error', function (event) { showMessage(event.message); }));
+    unsubscribe.push(EbiAR.events.on('gps:error', renderGpsError));
     unsubscribe.push(EbiAR.events.on('character:acquired', function (event) { showMessage((event.character && event.character.name || 'キャラクター') + 'を発見！'); }));
     unsubscribe.push(EbiAR.events.on('character:levelup', function () { showMessage('レベルアップ！'); }));
     unsubscribe.push(EbiAR.events.on('quest:complete', function (event) { showMessage('クエスト達成：' + (event.quest && event.quest.title || '')); }));
