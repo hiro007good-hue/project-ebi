@@ -20,7 +20,8 @@
   var AREA_IDS = Object.freeze({
     townHall: 'hino-machikado-kanno', oldTown: 'omi-hino-merchant-museum', station: 'hino-machikado-kanno',
     culture: 'umamioka-watamuki-shrine', park: 'hamada', riverside: 'wakakusa-spring',
-    foothill: 'nakano-castle-ruins', west: 'gamo-ujisato-statue', east: 'kishitsu-shrine', south: 'hamada'
+    foothill: 'nakano-castle-ruins', west: 'gamo-ujisato-statue', east: 'kishitsu-shrine', south: 'hamada',
+    watamuki: 'watamuki-jinja'
   });
 
   function definition(id, name, rarity, appearanceArea, description, points, appearanceAreas) {
@@ -59,7 +60,8 @@
     definition('satoyama-knight', '里山ナイト', 'epic', AREA_IDS.foothill, '自然と人の暮らしの調和を守る騎士。', 70),
     definition('hino-gold', '黄金えび', 'epic', AREA_IDS.west, '夕日に照らされる田園で輝く、幸運の海老フライ。', 70),
     definition('king-furai', 'フライ王', 'legendary', AREA_IDS.foothill, '王国を治める伝説の海老フライ。礼儀正しい冒険者を待っている。', 120),
-    definition('queen-tartar', 'タルタル女王', 'legendary', AREA_IDS.east, '日野町の旅を見守る王国の女王。出会えたら大きな幸運。', 120)
+    definition('queen-tartar', 'タルタル女王', 'legendary', AREA_IDS.east, '日野町の旅を見守る王国の女王。出会えたら大きな幸運。', 120),
+    definition('watamuki-ebi', 'わたむきえび', 'rare', AREA_IDS.watamuki, '村社綿向神社を守る神聖な海老キャラクター。', 40)
   ]);
   var byId = {};
   CHARACTERS.forEach(function (item) { byId[item.id] = item; });
