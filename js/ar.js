@@ -14,6 +14,7 @@
   var dom = null;
   var listeners = {};
   var gpsConnected = false;
+  var discoverySpotId = null;
 
   function emit(name, detail) {
     (listeners[name] || []).slice().forEach(function (handler) { try { handler(detail); } catch (error) { console.error('[EbiAR AR]', error); } });
@@ -51,7 +52,7 @@
     dom.stage.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); capture(); } });
     document.addEventListener('visibilitychange', function () { if (document.hidden && isRunning()) stop(); });
     dom.search.addEventListener('click', function () { start(characterId); });
-    dom.discoveryClose.addEventListener('click', function () { dom.discovery.hidden = true; dom.root.hidden = true; });
+    dom.discoveryClose.addEventListener('click', function () { dom.discovery.hidden = true; dom.root.hidden = true; discoverySpotId = null; });
     return dom;
   }
   function showError(error) {
@@ -60,7 +61,12 @@
     target.hidden = false;
   }
   function setMessage(message) { var target = byId('ar-message'); if (target) target.textContent = message; }
-  function currentSpotName(definition) { var spot = definition && EbiAR.spots && EbiAR.spots.getById ? EbiAR.spots.getById(definition.appearanceArea) : null; return spot ? spot.name : '日野町のスポット'; }
+  function currentSpotName(definition) {
+    if (!definition || !EbiAR.spots || !EbiAR.spots.getById) return '日野町のスポット';
+    var spot = discoverySpotId ? EbiAR.spots.getById(discoverySpotId) : null;
+    if (!spot) spot = EbiAR.spots.getById(definition.appearanceArea);
+    return spot ? spot.name : '日野町のスポット';
+  }
   function playCharacterSounds(definition) {
     if (!EbiAR.sound || !definition) return;
     EbiAR.sound.playSe('spotArrived');
@@ -106,7 +112,7 @@
     var ids = (spot.characters || spot.spawnCharacterIds || []).filter(function (id) { return acquired.indexOf(id) === -1 && EbiAR.character && EbiAR.character.getById && EbiAR.character.getById(id); });
     if (!ids.length) return null;
     var id = ids[Math.floor(Math.random() * ids.length)];
-    setCharacter(id); ensureDom();
+    setCharacter(id); discoverySpotId = spot.id; ensureDom();
     var definition = character(); var rarity = EbiAR.character.rarities && EbiAR.character.rarities[definition.rarity];
     byId('ar-discovery-name').textContent = definition.name;
     byId('ar-discovery-rarity').textContent = rarity ? rarity.name : definition.rarity;
@@ -168,14 +174,15 @@
     if (EbiAR.photo) EbiAR.photo.close();
     if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
     if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
-    if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } return; }
+    if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } discoverySpotId = null; return; }
     if (state === STATES.STOPPING) return;
     changeState(STATES.STOPPING); stopTracks();
     if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; }
-    capturing = false; mode = 'image'; changeState(STATES.IDLE); emit('stopped', { characterId: characterId });
+    capturing = false; mode = 'image'; discoverySpotId = null; changeState(STATES.IDLE); emit('stopped', { characterId: characterId });
   }
   function setCharacter(id) {
     if (!EbiAR.character || !EbiAR.character.getById || !EbiAR.character.getById(id)) return false;
+    if (characterId !== id) discoverySpotId = null;
     characterId = id; if (dom && isRunning()) renderCharacter(); return true;
   }
 
@@ -219,7 +226,7 @@
       characterName: definition && definition.name
     });
   }
-  function getState() { return Object.freeze({ state: state, characterId: characterId, mode: mode, running: isRunning(), cameraSupported: supportedCamera(), usingCamera: !!stream, canUseWebXR: !!(global.navigator && global.navigator.xr) }); }
+  function getState() { return Object.freeze({ state: state, characterId: characterId, spotId: discoverySpotId, mode: mode, running: isRunning(), cameraSupported: supportedCamera(), usingCamera: !!stream, canUseWebXR: !!(global.navigator && global.navigator.xr) }); }
   function on(name, handler) { if (typeof handler !== 'function') return function () {}; (listeners[name] || (listeners[name] = [])).push(handler); return function () { off(name, handler); }; }
   function off(name, handler) { if (listeners[name]) listeners[name] = listeners[name].filter(function (candidate) { return candidate !== handler; }); }
 

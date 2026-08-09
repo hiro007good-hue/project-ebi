@@ -23,9 +23,13 @@
     foothill: 'nakano-castle-ruins', west: 'gamo-ujisato-statue', east: 'kishitsu-shrine', south: 'hamada'
   });
 
-  function definition(id, name, rarity, appearanceArea, description, points) {
+  function definition(id, name, rarity, appearanceArea, description, points, appearanceAreas) {
+    var areas = (Array.isArray(appearanceAreas) ? appearanceAreas : [appearanceArea]).filter(function (area, index, all) {
+      return typeof area === 'string' && area && all.indexOf(area) === index;
+    });
+    if (areas.indexOf(appearanceArea) < 0) areas.push(appearanceArea);
     return Object.freeze({
-      id: id, name: name, rarity: rarity, appearanceArea: appearanceArea,
+      id: id, name: name, rarity: rarity, appearanceArea: appearanceArea, appearanceAreas: Object.freeze(areas),
       description: description, miniGuide: '',
       // 既存の model / image / sound は維持。AR描画側は arModel を利用できる。
       model: 'models/' + id + '.glb', image: 'images/characters/' + id + '.webp', sound: 'sounds/characters/' + id + '.mp3',
@@ -36,7 +40,7 @@
 
   // すべて本作オリジナルのキャラクターです。素材ファイル名は assets 配下と一致させます。
   var CHARACTERS = Object.freeze([
-    definition('ebi-maru', 'エビ丸', 'common', AREA_IDS.townHall, '王国の使者を夢見る、まっすぐな海老フライ。', 10),
+    definition('ebi-maru', 'エビ丸', 'common', AREA_IDS.townHall, '王国の使者を夢見る、まっすぐな海老フライ。', 10, [AREA_IDS.park, AREA_IDS.townHall]),
     definition('cabbage-kun', 'キャベツくん', 'common', AREA_IDS.oldTown, '衣の相棒を探して町を歩く、さわやかなキャベツ。', 10),
     definition('lemon-pyon', 'レモンぴょん', 'common', AREA_IDS.park, '酸っぱいひらめきで旅人を応援する案内役。', 10),
     definition('tart-chan', 'タルタルちゃん', 'common', AREA_IDS.park, 'ピクニックが大好きな、ふんわりタルタル。', 10),
@@ -133,24 +137,32 @@
     if (!definition || typeof definition.appearanceArea !== 'string' || !EbiAR.spots || typeof EbiAR.spots.get !== 'function') return null;
     return EbiAR.spots.get(definition.appearanceArea);
   }
+  function resolveAppearanceSpots(definition) {
+    if (!definition || !EbiAR.spots || typeof EbiAR.spots.get !== 'function') return [];
+    var areaIds = Array.isArray(definition.appearanceAreas) && definition.appearanceAreas.length ? definition.appearanceAreas : [definition.appearanceArea];
+    return areaIds.map(function (id) { return EbiAR.spots.get(id); }).filter(Boolean);
+  }
   function canAppear(definition, position) {
     if (!definition || !position || !Number.isFinite(Number(position.latitude)) || !Number.isFinite(Number(position.longitude))) return false;
-    var spot = resolveAppearanceSpot(definition);
-    if (!spot) return false;
-    if (EbiAR.spots && typeof EbiAR.spots.isWithin === 'function') return EbiAR.spots.isWithin(spot, position);
-    return distanceMeters(position, spot) <= spot.radiusMeters;
+    return resolveAppearanceSpots(definition).some(function (spot) {
+      if (EbiAR.spots && typeof EbiAR.spots.isWithin === 'function') return EbiAR.spots.isWithin(spot, position);
+      return distanceMeters(position, spot) <= spot.radiusMeters;
+    });
   }
   function matches(definition, query) {
     query = String(query || '').trim().toLocaleLowerCase('ja-JP');
     if (!query) return true;
-    var spot = resolveAppearanceSpot(definition);
-    return [definition.id, definition.name, definition.rarity, RARITIES[definition.rarity].name, definition.description, definition.appearanceArea, spot ? spot.name : ''].join(' ').toLocaleLowerCase('ja-JP').indexOf(query) >= 0;
+    var spots = resolveAppearanceSpots(definition);
+    return [definition.id, definition.name, definition.rarity, RARITIES[definition.rarity].name, definition.description]
+      .concat(definition.appearanceAreas || [definition.appearanceArea], spots.map(function (spot) { return spot.name; }))
+      .join(' ').toLocaleLowerCase('ja-JP').indexOf(query) >= 0;
   }
   function catalogEntry(definition, character, position) {
     var acquired = !!character && character.discoveredEbi.indexOf(definition.id) >= 0;
     var spot = resolveAppearanceSpot(definition);
+    var appearanceSpots = resolveAppearanceSpots(definition);
     return Object.assign({}, definition, {
-      appearanceSpot: spot,
+      appearanceSpot: spot, appearanceSpots: appearanceSpots,
       miniGuide: spot ? spot.guide : definition.miniGuide,
       rarityInfo: RARITIES[definition.rarity], isAcquired: acquired, isUnacquired: !acquired,
       canAppearHere: canAppear(definition, position), record: acquired ? Object.assign({}, character.characterRecords[definition.id]) : null

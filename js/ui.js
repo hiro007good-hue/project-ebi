@@ -264,7 +264,8 @@
     var details = document.createElement('dl');
     function addDetail(label, value) { var term = document.createElement('dt'); term.textContent = label; var detail = document.createElement('dd'); detail.textContent = value; details.append(term, detail); }
     addDetail('取得状態', entry.isAcquired ? '取得済み' : '未発見');
-    if (entry.isAcquired && entry.appearanceSpot) addDetail('出現スポット', entry.appearanceSpot.name);
+    if (entry.isAcquired && entry.appearanceSpots?.length) addDetail('出現スポット', entry.appearanceSpots.map(function (spot) { return spot.name; }).join('、'));
+    else if (entry.isAcquired && entry.appearanceSpot) addDetail('出現スポット', entry.appearanceSpot.name);
     var acquiredAt = entry.isAcquired && entry.record ? formatAcquiredAt(entry.record.acquiredAt) : '';
     if (acquiredAt) addDetail('発見日時', acquiredAt);
     panel.append(createCharacterImage(entry, true), number, heading, rarity, description, details);
