@@ -18,13 +18,43 @@
 
   // spots.js のIDを唯一の出現エリア定義とする。座標・公開状態・ガイドはspots.jsで一元管理する。
   var AREA_IDS = Object.freeze({
-    townHall: 'hino-machikado-kanno', oldTown: 'omi-hino-merchant-museum', station: 'hino-machikado-kanno',
+    townHall: 'hino-machikado-kanno', oldTown: 'omi-hino-merchant-museum', station: 'hino-station',
     culture: 'umamioka-watamuki-shrine', park: 'hamada', riverside: 'wakakusa-spring',
     foothill: 'nakano-castle-ruins', west: 'gamo-ujisato-statue', east: 'kishitsu-shrine', south: 'hamada',
     watamuki: 'watamuki-jinja'
   });
 
+  // spots.js の出現候補と捕獲可能地点を常に同じ集合として扱う。
+  var APPEARANCE_PLACEMENTS = Object.freeze({
+    'ebi-maru': { primary: AREA_IDS.townHall, areas: [AREA_IDS.park, AREA_IDS.townHall] },
+    'cabbage-kun': { primary: AREA_IDS.oldTown, areas: [AREA_IDS.oldTown] },
+    'lemon-pyon': { primary: AREA_IDS.park, areas: [AREA_IDS.park, AREA_IDS.riverside] },
+    'tart-chan': { primary: AREA_IDS.park, areas: [AREA_IDS.park] },
+    'koromo-pon': { primary: AREA_IDS.south, areas: [AREA_IDS.south] },
+    'hino-bito': { primary: AREA_IDS.oldTown, areas: [AREA_IDS.oldTown, 'shingakuin-temple', AREA_IDS.east, 'omi-hino-furusatokan', 'tokumoto-shonin-inscription'] },
+    'machi-akari': { primary: AREA_IDS.culture, areas: [AREA_IDS.culture, AREA_IDS.oldTown, AREA_IDS.townHall, 'saimyoji-temple', 'shomeiji-temple', 'jofukuji-temple', 'tokumoto-shonin-inscription'] },
+    'kaze-ebi': { primary: AREA_IDS.east, areas: [AREA_IDS.east] },
+    'midori-furai': { primary: AREA_IDS.east, areas: [AREA_IDS.east] },
+    'kawa-taruto': { primary: AREA_IDS.riverside, areas: [AREA_IDS.riverside, 'jofukuji-temple'] },
+    'shonin-ebi': { primary: AREA_IDS.oldTown, areas: [AREA_IDS.oldTown, AREA_IDS.townHall, 'omi-hino-furusatokan'] },
+    'rail-furai': { primary: AREA_IDS.station, areas: [AREA_IDS.station] },
+    'yamamori': { primary: AREA_IDS.foothill, areas: [AREA_IDS.foothill, 'saimyoji-temple', AREA_IDS.east, 'shomeiji-temple', 'kongojoji-temple'] },
+    'mizube-queen': { primary: AREA_IDS.riverside, areas: [AREA_IDS.riverside] },
+    'festival-ebi': { primary: AREA_IDS.culture, areas: [AREA_IDS.culture, 'wakamatsu-forest-ruins', 'murasha-watamuki-shrine'] },
+    'castle-crisp': { primary: AREA_IDS.culture, areas: [AREA_IDS.culture, AREA_IDS.west, AREA_IDS.foothill, 'shingakuin-temple'] },
+    'satoyama-knight': { primary: AREA_IDS.foothill, areas: [AREA_IDS.foothill, 'saimyoji-temple', 'kongojoji-temple'] },
+    'hino-gold': { primary: AREA_IDS.west, areas: [AREA_IDS.west, 'wakamatsu-forest-ruins'] },
+    'king-furai': { primary: AREA_IDS.foothill, areas: [AREA_IDS.foothill, AREA_IDS.west, 'shingakuin-temple'] },
+    'queen-tartar': { primary: AREA_IDS.park, areas: [AREA_IDS.park, AREA_IDS.culture, 'murasha-watamuki-shrine'] },
+    'watamuki-ebi': { primary: AREA_IDS.watamuki, areas: [AREA_IDS.watamuki, AREA_IDS.culture] }
+  });
+
   function definition(id, name, rarity, appearanceArea, description, points, appearanceAreas) {
+    var placement = APPEARANCE_PLACEMENTS[id];
+    if (placement) {
+      appearanceArea = placement.primary;
+      appearanceAreas = placement.areas;
+    }
     var areas = (Array.isArray(appearanceAreas) ? appearanceAreas : [appearanceArea]).filter(function (area, index, all) {
       return typeof area === 'string' && area && all.indexOf(area) === index;
     });
