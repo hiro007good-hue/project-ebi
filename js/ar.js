@@ -16,6 +16,8 @@
   var gpsConnected = false;
   var discoverySpotId = null;
   var captureCompletionTimer = null;
+  var photoPreviewActive = false;
+  var suspendedPhotoSession = null;
 
   function emit(name, detail) {
     (listeners[name] || []).slice().forEach(function (handler) { try { handler(detail); } catch (error) { console.error('[EbiAR AR]', error); } });
@@ -51,9 +53,14 @@
     dom.photo.addEventListener('click', function () { takePhoto().catch(showError); });
     dom.stage.addEventListener('click', capture);
     dom.stage.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); capture(); } });
-    document.addEventListener('visibilitychange', function () { if (document.hidden && isRunning()) stop(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden && isRunning()) {
+        if (photoPreviewActive) suspendForPhoto();
+        else stop();
+      } else if (!document.hidden) resumePhotoSession();
+    });
     dom.search.addEventListener('click', function () { start(characterId); });
-    dom.discoveryClose.addEventListener('click', function () { dom.discovery.hidden = true; dom.root.hidden = true; discoverySpotId = null; });
+    dom.discoveryClose.addEventListener('click', stop);
     return dom;
   }
   function showError(error) {
@@ -170,6 +177,38 @@
     }
   }
   function isRunning() { return state === STATES.RUNNING || state === STATES.CAPTURING || state === STATES.CAPTURED; }
+  /** 写真共有等の一時的なページ非表示では、発見対象を保持してカメラだけ停止する。 */
+  function suspendForPhoto() {
+    if (!photoPreviewActive || !isRunning() || !characterId) return false;
+    suspendedPhotoSession = { characterId: characterId, spotId: discoverySpotId };
+    if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
+    if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
+    stopTracks();
+    changeState(STATES.IDLE, { reason: 'photo_preview_hidden' });
+    emit('suspended', Object.assign({}, suspendedPhotoSession));
+    return true;
+  }
+  /** 写真プレビュー終了後、同じキャラクター・スポットのARを再開する。 */
+  function resumePhotoSession() {
+    if (!suspendedPhotoSession || photoPreviewActive || (global.document && global.document.hidden)) return false;
+    var session = suspendedPhotoSession;
+    suspendedPhotoSession = null;
+    characterId = session.characterId;
+    discoverySpotId = session.spotId;
+    start(characterId);
+    return true;
+  }
+  /** 現在のGPS位置から未取得候補を能動的に再評価する。 */
+  function refreshDiscovery() {
+    if (state !== STATES.IDLE || suspendedPhotoSession || !EbiAR.gps) return null;
+    if (typeof EbiAR.gps.refreshSpots === 'function') EbiAR.gps.refreshSpots();
+    var activeSpots = typeof EbiAR.gps.getActiveSpots === 'function' ? EbiAR.gps.getActiveSpots() : [];
+    for (var index = 0; index < activeSpots.length; index += 1) {
+      var definition = showDiscovery(activeSpots[index]);
+      if (definition) return definition;
+    }
+    return null;
+  }
   /** 捕獲演出後、最新GPS位置で同じスポットの未取得候補を再評価する。 */
   function finishCapture(spotId) {
     captureCompletionTimer = null;
@@ -186,6 +225,8 @@
     var stoppedCharacterId = characterId;
     if (captureCompletionTimer !== null) global.clearTimeout(captureCompletionTimer);
     captureCompletionTimer = null;
+    suspendedPhotoSession = null;
+    photoPreviewActive = false;
     if (EbiAR.photo) EbiAR.photo.close();
     if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
     if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
@@ -242,7 +283,14 @@
       characterName: definition && definition.name
     });
   }
-  function getState() { return Object.freeze({ state: state, characterId: characterId, spotId: discoverySpotId, mode: mode, running: isRunning(), cameraSupported: supportedCamera(), usingCamera: !!stream, canUseWebXR: !!(global.navigator && global.navigator.xr) }); }
+  function currentDiscoveryState() {
+    if (state === STATES.CAPTURED) return 'CAPTURED';
+    if (photoPreviewActive || suspendedPhotoSession) return 'PHOTO_PREVIEW';
+    if (isRunning()) return 'AR_ACTIVE';
+    if (dom && !dom.root.hidden && !dom.discovery.hidden) return 'DISCOVERED';
+    return 'IDLE';
+  }
+  function getState() { return Object.freeze({ state: state, discoveryState: currentDiscoveryState(), characterId: characterId, spotId: discoverySpotId, mode: mode, running: isRunning(), cameraSupported: supportedCamera(), usingCamera: !!stream, canUseWebXR: !!(global.navigator && global.navigator.xr) }); }
   function on(name, handler) { if (typeof handler !== 'function') return function () {}; (listeners[name] || (listeners[name] = [])).push(handler); return function () { off(name, handler); }; }
   function off(name, handler) { if (listeners[name]) listeners[name] = listeners[name].filter(function (candidate) { return candidate !== handler; }); }
 
@@ -250,8 +298,12 @@
     if (gpsConnected || !EbiAR.events) return;
     gpsConnected = true;
     EbiAR.events.on('gps:spot-arrived', function (event) { showDiscovery(event.spot); });
+    EbiAR.events.on('ui:start-requested', refreshDiscovery);
+    EbiAR.events.on('photo:preview-open', function () { photoPreviewActive = true; });
+    EbiAR.events.on('photo:preview-close', function () { photoPreviewActive = false; resumePhotoSession(); });
+    EbiAR.events.on('photo:retake', function () { photoPreviewActive = false; resumePhotoSession(); });
   }
 
-  EbiAR.ar = Object.freeze({ start: start, stop: stop, isSupported: supportedCamera, isRunning: isRunning, capture: capture, setCharacter: setCharacter, takePhoto: takePhoto, getState: getState, on: on, off: off, showDiscovery: showDiscovery, STATES: STATES });
+  EbiAR.ar = Object.freeze({ start: start, stop: stop, isSupported: supportedCamera, isRunning: isRunning, capture: capture, setCharacter: setCharacter, takePhoto: takePhoto, getState: getState, on: on, off: off, showDiscovery: showDiscovery, refreshDiscovery: refreshDiscovery, STATES: STATES });
   connectGps();
 })(window);
