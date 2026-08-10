@@ -15,6 +15,7 @@
   var listeners = {};
   var gpsConnected = false;
   var discoverySpotId = null;
+  var captureCompletionTimer = null;
 
   function emit(name, detail) {
     (listeners[name] || []).slice().forEach(function (handler) { try { handler(detail); } catch (error) { console.error('[EbiAR AR]', error); } });
@@ -169,16 +170,30 @@
     }
   }
   function isRunning() { return state === STATES.RUNNING || state === STATES.CAPTURING || state === STATES.CAPTURED; }
+  /** 捕獲演出後、最新GPS位置で同じスポットの未取得候補を再評価する。 */
+  function finishCapture(spotId) {
+    captureCompletionTimer = null;
+    stop();
+    if (!spotId || (global.document && global.document.hidden) || !EbiAR.gps) return;
+    if (typeof EbiAR.gps.refreshSpots === 'function') EbiAR.gps.refreshSpots();
+    var activeSpots = typeof EbiAR.gps.getActiveSpots === 'function' ? EbiAR.gps.getActiveSpots() : [];
+    var spot = activeSpots.find(function (candidate) { return candidate.id === spotId; });
+    if (!spot) return;
+    if (!showDiscovery(spot)) emit('spot-complete', { spot: spot });
+  }
   /** AR画面とカメラストリームを完全に終了する。 */
   function stop() {
+    var stoppedCharacterId = characterId;
+    if (captureCompletionTimer !== null) global.clearTimeout(captureCompletionTimer);
+    captureCompletionTimer = null;
     if (EbiAR.photo) EbiAR.photo.close();
     if (EbiAR.Blink && dom) EbiAR.Blink.stop(dom.image);
     if (EbiAR.idle && dom) EbiAR.idle.stop(dom.idle);
-    if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } discoverySpotId = null; return; }
+    if (state === STATES.IDLE) { if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; } discoverySpotId = null; characterId = null; return; }
     if (state === STATES.STOPPING) return;
     changeState(STATES.STOPPING); stopTracks();
     if (dom) { dom.root.hidden = true; dom.discovery.hidden = true; }
-    capturing = false; mode = 'image'; discoverySpotId = null; changeState(STATES.IDLE); emit('stopped', { characterId: characterId });
+    capturing = false; mode = 'image'; discoverySpotId = null; characterId = null; changeState(STATES.IDLE); emit('stopped', { characterId: stoppedCharacterId });
   }
   function setCharacter(id) {
     if (!EbiAR.character || !EbiAR.character.getById || !EbiAR.character.getById(id)) return false;
@@ -202,7 +217,8 @@
       if (EbiAR.save) { try { EbiAR.save.saveGame(); } catch (saveError) { emit('error', { error: saveError, message: '捕獲しましたが、保存に失敗しました。' }); } }
       changeState(STATES.CAPTURED, result); emit('captured', result);
       setMessage(result.character.name + ' をつかまえた！');
-      global.setTimeout(stop, 1050);
+      var capturedSpotId = discoverySpotId;
+      captureCompletionTimer = global.setTimeout(function () { finishCapture(capturedSpotId); }, 1050);
       return result;
     } catch (error) {
       changeState(STATES.ERROR, error); emit('error', { error: error, message: '捕獲処理でエラーが発生しました。' }); showError('捕獲処理でエラーが発生しました。'); return { ok: false, reason: 'capture_error' };

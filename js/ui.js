@@ -342,6 +342,7 @@
     unsubscribe.push(EbiAR.events.on('gps:spot-arrived', function (event) { renderSpot(event.spot); showMessage(event.spot.name + ' に到着しました'); }));
     unsubscribe.push(EbiAR.events.on('gps:error', renderGpsError));
     unsubscribe.push(EbiAR.events.on('character:acquired', function (event) { showMessage((event.character && event.character.name || 'キャラクター') + 'を発見！'); }));
+    unsubscribe.push(EbiAR.events.on('ar:spot-complete', function (event) { showMessage((event.spot && event.spot.name || 'このスポット') + 'のキャラクターはすべて発見しました'); }));
     unsubscribe.push(EbiAR.events.on('character:levelup', function () { showMessage('レベルアップ！'); }));
     unsubscribe.push(EbiAR.events.on('quest:complete', function (event) { showMessage('クエスト達成：' + (event.quest && event.quest.title || '')); }));
     unsubscribe.push(EbiAR.events.on('achievement:unlock', function (event) { showMessage('実績解除：' + (event.achievement && event.achievement.title || '')); }));
