@@ -77,8 +77,6 @@
   }
   function playCharacterSounds(definition) {
     if (!EbiAR.sound || !definition) return;
-    EbiAR.sound.playSe('spotArrived');
-    EbiAR.sound.playSe('characterFound');
     if (definition.sound && EbiAR.sound.configure) {
       EbiAR.sound.configure({ se: { characterVoice: definition.sound, rareCharacter: definition.sound } });
       EbiAR.sound.playSe('characterVoice');

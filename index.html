@@ -27,11 +27,11 @@
   <script src="js/quest.js"></script>
   <script src="js/story.js"></script>
   <script src="js/ending.js"></script>
-  <script src="js/save.js"></script>
-  <script src="js/sound.js"></script>
+  <script src="js/save.js?rev=audio-system"></script>
+  <script src="js/sound.js?rev=audio-system"></script>
   <script src="js/effect.js"></script>
-  <script src="js/ui.js?rev=gps-multi-capture"></script>
-  <script src="js/ar.js?rev=ar-resume-fix"></script>
+  <script src="js/ui.js?rev=audio-system"></script>
+  <script src="js/ar.js?rev=audio-system"></script>
   <script>
     window.addEventListener('DOMContentLoaded', function () {
       var saved = null;
@@ -47,7 +47,7 @@
       EbiAR.Ending.initialize(saved && saved.ending);
       EbiAR.events.on('ui:start-requested', function () {
         EbiAR.sound.unlock();
-        EbiAR.sound.playBgm('adventure', { fadeMs: 300 });
+        EbiAR.sound.playBgm('adventure-theme', { fadeMs: 300 });
         EbiAR.gps.start();
         EbiAR.events.emit('game:started', { started: true, startedAt: new Date().toISOString() });
       });

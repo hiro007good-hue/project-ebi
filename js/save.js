@@ -12,7 +12,9 @@
   var MAX_GPS_HISTORY = 20;
   var autoSaveTimer = null;
   var gpsHistory = [];
-  var extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {} };
+  var preservedData = {};
+  var DEFAULT_AUDIO_SETTINGS = Object.freeze({ bgmEnabled: true, seEnabled: true, bgmVolume: 0.6, seVolume: 0.8 });
+  var extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {}, audioSettings: Object.assign({}, DEFAULT_AUDIO_SETTINGS) };
 
   /** 保存に失敗した際に、呼び出し側が原因を識別できるエラー。 */
   function SaveError(code, message, cause) {
@@ -68,11 +70,26 @@
     });
   }
 
+  /** 旧Saveに音声設定がない場合もSave全体を初期化せず既定値だけ補完する。 */
+  function normalizeAudioSettings(value) {
+    value = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    function volume(name) {
+      var number = Number(value[name]);
+      return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : DEFAULT_AUDIO_SETTINGS[name];
+    }
+    return {
+      bgmEnabled: typeof value.bgmEnabled === 'boolean' ? value.bgmEnabled : DEFAULT_AUDIO_SETTINGS.bgmEnabled,
+      seEnabled: typeof value.seEnabled === 'boolean' ? value.seEnabled : DEFAULT_AUDIO_SETTINGS.seEnabled,
+      bgmVolume: volume('bgmVolume'),
+      seVolume: volume('seVolume')
+    };
+  }
+
   /** 実行中のgame.jsから保存対象を収集する。 */
   function collectGameState() {
     var gameState = EbiAR.game && typeof EbiAR.game.exportSave === 'function' ? EbiAR.game.exportSave() : null;
     var character = gameState && gameState.character ? gameState.character : (EbiAR.character && EbiAR.character.create ? EbiAR.character.create() : {});
-    return {
+    return Object.assign({}, clone(preservedData), {
       player: clone(character),
       game: {
         collectedSpotIds: idList(gameState && gameState.collectedSpotIds),
@@ -85,8 +102,9 @@
       story: EbiAR.Story && typeof EbiAR.Story.exportState === 'function' ? EbiAR.Story.exportState() : clone(extras.story),
       ending: EbiAR.Ending && typeof EbiAR.Ending.exportState === 'function' ? EbiAR.Ending.exportState() : clone(extras.ending),
       settings: clone(extras.settings),
+      audioSettings: EbiAR.sound && typeof EbiAR.sound.getSettings === 'function' ? clone(EbiAR.sound.getSettings()) : clone(extras.audioSettings),
       gpsHistory: normalizeGpsHistory(gpsHistory)
-    };
+    });
   }
 
   /**
@@ -98,7 +116,7 @@
     data = data || {};
     var player = EbiAR.character && EbiAR.character.create ? EbiAR.character.create(data.player || data.character) : clone(data.player || data.character || {});
     if (!player.coupons.length && Array.isArray(data.coupons)) player.coupons = idList(data.coupons);
-    return {
+    return Object.assign({}, clone(data), {
       player: player,
       game: {
         collectedSpotIds: idList(data.game && data.game.collectedSpotIds || data.collectedSpotIds),
@@ -113,8 +131,9 @@
       story: data.story && typeof data.story === 'object' ? clone(data.story) : null,
       ending: data.ending && typeof data.ending === 'object' ? clone(data.ending) : null,
       settings: data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) ? clone(data.settings) : {},
+      audioSettings: normalizeAudioSettings(data.audioSettings),
       gpsHistory: normalizeGpsHistory(data.gpsHistory)
-    };
+    });
   }
 
   /** 保存エンベロープを生成する。 */
@@ -145,14 +164,17 @@
 
   /** メモリ上の追加データを最新のセーブ内容に合わせる。 */
   function applyRuntimeData(data) {
+    preservedData = clone(data);
     extras = {
       coupons: clone(data.coupons),
       quest: clone(data.quest),
       achievement: clone(data.achievement),
       story: clone(data.story),
       ending: clone(data.ending),
-      settings: clone(data.settings)
+      settings: clone(data.settings),
+      audioSettings: normalizeAudioSettings(data.audioSettings)
     };
+    if (EbiAR.sound && typeof EbiAR.sound.applySettings === 'function') EbiAR.sound.applySettings(extras.audioSettings, { silent: true, resume: false });
     gpsHistory = normalizeGpsHistory(data.gpsHistory);
     return clone(data);
   }
@@ -220,7 +242,9 @@
       throw new SaveError('reset_failed', 'セーブデータを削除できませんでした。', error);
     }
     gpsHistory = [];
-    extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {} };
+    preservedData = {};
+    extras = { coupons: [], quest: null, achievement: null, story: null, ending: null, settings: {}, audioSettings: Object.assign({}, DEFAULT_AUDIO_SETTINGS) };
+    if (EbiAR.sound && typeof EbiAR.sound.applySettings === 'function') EbiAR.sound.applySettings(extras.audioSettings, { silent: true });
     restoreGameState(normalizeData({}));
     if (EbiAR.events) EbiAR.events.emit('save:reset');
   }

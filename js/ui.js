@@ -11,7 +11,7 @@
   var lastFocusedElement = null;
   var unsubscribe = [];
   var failedCharacterImages = new Set();
-  var settings = { sound: true, vibration: true, highContrast: false };
+  var settings = { bgmEnabled: true, seEnabled: true, bgmVolume: 0.6, seVolume: 0.8, vibration: true, highContrast: false };
   var timers = {};
 
   /** HTMLとして解釈せず、安全なテキストノードを生成する。 */
@@ -104,7 +104,24 @@
   function createQuest() { var el = screen('screen-quest'); el.append(button('← 戻る', 'game', 'back')); var content = document.createElement('div'); content.id = 'quest-root'; el.append(content); return el; }
   function createAchievement() { var el = screen('screen-achievement'); el.append(button('← 戻る', 'game', 'back')); var content = document.createElement('div'); content.id = 'achievement-root'; el.append(content); return el; }
   function createCoupons() { var el = screen('screen-coupons'); el.append(button('← 戻る', 'game', 'back')); var heading = document.createElement('h2'); heading.textContent = 'クーポン'; var list = document.createElement('div'); list.id = 'coupon-list'; list.className = 'panel'; el.append(heading, list); return el; }
-  function createSettings() { var el = screen('screen-settings'); el.append(button('← 戻る', 'game', 'back')); var heading = document.createElement('h2'); heading.textContent = '設定'; var panel = document.createElement('div'); panel.className = 'panel'; [['sound','効果音'], ['vibration','バイブレーション'], ['highContrast','高コントラスト表示']].forEach(function (item) { var label = document.createElement('label'); var input = document.createElement('input'); input.type = 'checkbox'; input.dataset.setting = item[0]; input.checked = settings[item[0]]; label.append(input, text(' ' + item[1])); panel.appendChild(label); panel.appendChild(document.createElement('br')); }); el.append(heading, panel); return el; }
+  function createSettings() {
+    if (EbiAR.sound && typeof EbiAR.sound.getSettings === 'function') settings = Object.assign(settings, EbiAR.sound.getSettings());
+    var el = screen('screen-settings'); el.append(button('← 戻る', 'game', 'back'));
+    var heading = document.createElement('h2'); heading.textContent = '設定';
+    var panel = document.createElement('div'); panel.className = 'panel';
+    [['bgmEnabled','BGM'], ['seEnabled','効果音'], ['vibration','バイブレーション'], ['highContrast','高コントラスト表示']].forEach(function (item) {
+      var label = document.createElement('label'); var input = document.createElement('input');
+      input.type = 'checkbox'; input.dataset.setting = item[0]; input.checked = settings[item[0]];
+      label.append(input, text(' ' + item[1])); panel.appendChild(label); panel.appendChild(document.createElement('br'));
+    });
+    [['bgmVolume','BGM音量'], ['seVolume','効果音音量']].forEach(function (item) {
+      var label = document.createElement('label'); label.textContent = item[1] + ' ';
+      var input = document.createElement('input'); input.type = 'range'; input.min = '0'; input.max = '1'; input.step = '0.05'; input.value = settings[item[0]]; input.dataset.setting = item[0]; input.setAttribute('aria-label', item[1]);
+      label.appendChild(input); panel.appendChild(label); panel.appendChild(document.createElement('br'));
+    });
+    var note = document.createElement('p'); note.textContent = 'Safariで遊んでいたデータが表示されない場合は、Saveのエクスポート／インポートをご利用ください。';
+    panel.appendChild(note); el.append(heading, panel); return el;
+  }
 
   /** 指定画面をフェード付きで表示する。 */
   function showScreen(name) {
@@ -301,6 +318,18 @@
     values.forEach(function (coupon) { var row = document.createElement('p'); row.textContent = typeof coupon === 'string' ? coupon : (coupon.name || coupon.id || 'クーポン'); target.appendChild(row); });
   }
 
+  /** Save load/import/reset後にAudioManagerの値を設定フォームへ同期する。 */
+  function syncAudioSettingsControls() {
+    if (!EbiAR.sound || typeof EbiAR.sound.getSettings !== 'function') return;
+    settings = Object.assign(settings, EbiAR.sound.getSettings());
+    ['bgmEnabled', 'seEnabled', 'bgmVolume', 'seVolume'].forEach(function (key) {
+      var input = root && root.querySelector('[data-setting="' + key + '"]');
+      if (!input) return;
+      if (input.type === 'range') input.value = settings[key];
+      else input.checked = settings[key];
+    });
+  }
+
   function handleClick(event) {
     if (event.target.id === 'character-modal') { closeCharacterDetail(); return; }
     var target = event.target.closest('[data-action]'); if (!target || !root.contains(target)) return;
@@ -313,8 +342,17 @@
   function handleChange(event) {
     if (event.target.id === 'catalog-filter' || event.target.id === 'catalog-sort') { renderCatalog(); return; }
     var key = event.target.dataset.setting; if (!key) return;
-    settings[key] = !!event.target.checked;
+    settings[key] = event.target.type === 'range' ? Number(event.target.value) : !!event.target.checked;
     if (key === 'highContrast') root.classList.toggle('high-contrast', settings[key]);
+    if (EbiAR.sound) {
+      if (key === 'bgmEnabled') EbiAR.sound.setBgmEnabled(settings[key]);
+      if (key === 'seEnabled') EbiAR.sound.setSeEnabled(settings[key]);
+      if (key === 'bgmVolume') EbiAR.sound.setBgmVolume(settings[key]);
+      if (key === 'seVolume') EbiAR.sound.setSeVolume(settings[key]);
+    }
+    if ((key === 'bgmEnabled' || key === 'seEnabled' || key === 'bgmVolume' || key === 'seVolume') && EbiAR.save) {
+      try { EbiAR.save.saveGame(); } catch (error) { showMessage('音声設定を保存できませんでした。'); }
+    }
     if (EbiAR.events) EbiAR.events.emit('ui:settings-changed', Object.assign({}, settings));
   }
   function handleInput(event) { if (event.target.id === 'catalog-search') renderCatalog(); }
@@ -350,8 +388,9 @@
     unsubscribe.push(EbiAR.events.on('achievement:error', function () { showMessage('実績処理でエラーが発生しました。'); }));
     unsubscribe.push(EbiAR.events.on('story:start', function (event) { showMessage('ストーリー開始：' + (event.story && event.story.title || '')); }));
     unsubscribe.push(EbiAR.events.on('story:complete', function (event) { showMessage('ストーリー完了：' + (event.story && event.story.title || '')); }));
-    unsubscribe.push(EbiAR.events.on('save:loaded', refreshCatalogIfVisible));
-    unsubscribe.push(EbiAR.events.on('save:reset', refreshCatalogIfVisible));
+    unsubscribe.push(EbiAR.events.on('save:loaded', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); }));
+    unsubscribe.push(EbiAR.events.on('save:imported', syncAudioSettingsControls));
+    unsubscribe.push(EbiAR.events.on('save:reset', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); }));
   }
 
   /** UIを初期化し、タイトル画面を表示する。 */
