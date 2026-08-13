@@ -17,18 +17,24 @@
       'adventure-theme': 'sounds/bgm-adventure.mp3'
     }),
     se: Object.freeze({
-      characterDiscovery: 'sounds/se-character-found.mp3',
-      'character-discovery': 'sounds/se-character-found.mp3',
-      captureSuccess: 'sounds/se-capture-success.mp3',
-      'capture-success': 'sounds/se-capture-success.mp3',
-      cameraShutter: 'sounds/se-camera-shutter.mp3',
-      'camera-shutter': 'sounds/se-camera-shutter.mp3',
-      achievementUnlock: 'sounds/se-achievement-unlock.mp3',
-      'achievement-unlock': 'sounds/se-achievement-unlock.mp3',
-      buttonTap: 'sounds/se-button.mp3',
-      'button-tap': 'sounds/se-button.mp3',
+      characterDiscovery: 'sounds/se_discover.mp3',
+      'character-discovery': 'sounds/se_discover.mp3',
+      captureSuccess: 'sounds/se_capture.mp3',
+      'capture-success': 'sounds/se_capture.mp3',
+      achievementUnlock: 'sounds/se_levelup.mp3',
+      'achievement-unlock': 'sounds/se_levelup.mp3',
+      levelUp: 'sounds/se_levelup.mp3',
+      'level-up': 'sounds/se_levelup.mp3',
+      pointEarned: 'sounds/se_point.mp3',
+      'point-earned': 'sounds/se_point.mp3',
+      buttonTap: 'sounds/se_click.mp3',
+      'button-tap': 'sounds/se_click.mp3',
+      'discover-hino-gold': 'sounds/ch_golden_ebi.mp3',
+      'discover-castle-crisp': 'sounds/ch_honoo_shogun_ebi.mp3',
+      'discover-yamamori': 'sounds/ch_ninja_ebi.mp3',
+      'discover-satoyama-knight': 'sounds/ch_ryujin_ebi.mp3',
+      'discover-queen-tartar': 'sounds/ch_niji_ebi.mp3',
       spotArrived: 'sounds/se-spot-arrived.mp3',
-      levelUp: 'sounds/se-level-up.mp3',
       couponReceived: 'sounds/se-coupon-received.mp3'
     })
   });
@@ -47,6 +53,14 @@
   var gestureHandler = null;
   var buttonHandler = null;
   var visibilityHandler = null;
+  var lastPlayedAt = new Map();
+  var SPECIAL_DISCOVERY_SE = Object.freeze({
+    'hino-gold': 'discover-hino-gold',
+    'castle-crisp': 'discover-castle-crisp',
+    'yamamori': 'discover-yamamori',
+    'satoyama-knight': 'discover-satoyama-knight',
+    'queen-tartar': 'discover-queen-tartar'
+  });
 
   function clamp(value, fallback) {
     var number = Number(value);
@@ -183,6 +197,11 @@
     options = options || {};
     var source = assets.se[id];
     if (!source || !canUseAudio() || !unlocked || !channelEnabled('se') || destroyed) return Promise.resolve(false);
+    var cooldownKey = String(options.cooldownKey || id);
+    var cooldownMs = Math.max(0, Number(options.cooldownMs) || 0);
+    var timestamp = Date.now();
+    if (cooldownMs && timestamp - (lastPlayedAt.get(cooldownKey) || 0) < cooldownMs) return Promise.resolve(false);
+    lastPlayedAt.set(cooldownKey, timestamp);
     var audio = createAudio(source, false);
     if (!audio) return Promise.resolve(false);
     audio.volume = clamp(options.volume, channelVolume('se'));
@@ -217,15 +236,20 @@
     }, settings));
   }
 
+  function discoverySe(detail) {
+    var id = detail && detail.character && detail.character.id;
+    return SPECIAL_DISCOVERY_SE[id] || 'character-discovery';
+  }
+
   /** EventBusのゲームイベントを各SEへ一度だけ接続する。 */
   function connectEvents() {
     if (!EbiAR.events || subscriptions.length) return;
-    subscriptions.push(EbiAR.events.on('ar:discovered', function () { playSe('character-discovery'); }));
+    subscriptions.push(EbiAR.events.on('ar:discovered', function (detail) { playSe(discoverySe(detail), { cooldownKey: 'character-discovery', cooldownMs: 250 }); }));
     subscriptions.push(EbiAR.events.on('ar:captured', function () { playSe('capture-success'); }));
-    subscriptions.push(EbiAR.events.on('photo:captured', function () { playSe('camera-shutter'); }));
-    subscriptions.push(EbiAR.events.on('achievement:unlock', function () { playSe('achievement-unlock'); }));
+    subscriptions.push(EbiAR.events.on('achievement:unlock', function () { playSe('achievement-unlock', { cooldownKey: 'level-achievement', cooldownMs: 600 }); }));
+    subscriptions.push(EbiAR.events.on('game:points-changed', function () { playSe('point-earned', { cooldownKey: 'point-earned', cooldownMs: 180 }); }));
     subscriptions.push(EbiAR.events.on('gps:spot-arrived', function () { playSe('spotArrived'); }));
-    subscriptions.push(EbiAR.events.on('character:levelup', function () { playSe('levelUp'); }));
+    subscriptions.push(EbiAR.events.on('character:levelup', function () { playSe('level-up', { cooldownKey: 'level-achievement', cooldownMs: 600 }); }));
     subscriptions.push(EbiAR.events.on('coupon:acquired', function () { playSe('couponReceived'); }));
     subscriptions.push(EbiAR.events.on('save:loaded', function (data) { applySettings(data && data.audioSettings, { silent: true, resume: false }); }));
     subscriptions.push(EbiAR.events.on('save:imported', function (data) { applySettings(data && data.audioSettings, { silent: true }); }));
@@ -256,7 +280,10 @@
       gestureHandler = null;
     };
     buttonHandler = function (event) {
-      if (event.target.closest && event.target.closest('button,[data-action]')) playSe('button-tap');
+      if (!event.target.closest) return;
+      var control = event.target.closest('button,[data-action]');
+      if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim]')) return;
+      playSe('button-tap');
     };
     global.document.addEventListener('pointerdown', gestureHandler, true);
     global.document.addEventListener('keydown', gestureHandler, true);
@@ -274,6 +301,7 @@
     if (global.document && buttonHandler) global.document.removeEventListener('click', buttonHandler, true);
     if (global.document && visibilityHandler) global.document.removeEventListener('visibilitychange', visibilityHandler);
     gestureHandler = null; buttonHandler = null; visibilityHandler = null;
+    lastPlayedAt.clear();
   }
 
   var api = Object.freeze({

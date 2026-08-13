@@ -75,16 +75,6 @@
     if (!spot) spot = EbiAR.spots.getById(definition.appearanceArea);
     return spot ? spot.name : '日野町のスポット';
   }
-  function playCharacterSounds(definition) {
-    if (!EbiAR.sound || !definition) return;
-    if (definition.sound && EbiAR.sound.configure) {
-      EbiAR.sound.configure({ se: { characterVoice: definition.sound, rareCharacter: definition.sound } });
-      EbiAR.sound.playSe('characterVoice');
-      var rarity = EbiAR.character.rarities && EbiAR.character.rarities[definition.rarity];
-      if (rarity && rarity.rank >= 4) EbiAR.sound.playSe('rareCharacter');
-    }
-  }
-
   /** キャラクター情報を画像優先でARレイヤーに表示する。 */
   function renderCharacter() {
     var definition = character();
@@ -165,7 +155,6 @@
       await dom.video.play();
       mode = 'camera'; byId('ar-mode-label').textContent = 'カメラAR'; setMessage('キャラクターを見つけたら、タップしてつかまえよう。');
       changeState(STATES.RUNNING, { mode: mode }); emit('started', { characterId: characterId, mode: mode });
-      playCharacterSounds(character());
       if (EbiAR.effect) EbiAR.effect.characterAppear(character());
       return true;
     } catch (error) {

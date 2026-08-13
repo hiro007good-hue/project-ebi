@@ -1,9 +1,10 @@
 /* Project EBI PWA cache. Increment CACHE_VERSION whenever the app shell changes. */
 'use strict';
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}`;
 const CHARACTER_CACHE = `project-ebi-characters-${CACHE_VERSION}`;
+const AUDIO_CACHE = `project-ebi-audio-${CACHE_VERSION}`;
 const CACHE_PREFIX = 'project-ebi-';
 const OFFLINE_URL = './offline.html';
 const APP_SHELL = [
@@ -45,7 +46,7 @@ self.addEventListener('install', function (event) {
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (names) {
     return Promise.all(names.filter(function (name) {
-      return name.startsWith(CACHE_PREFIX) && name !== SHELL_CACHE && name !== CHARACTER_CACHE;
+      return name.startsWith(CACHE_PREFIX) && name !== SHELL_CACHE && name !== CHARACTER_CACHE && name !== AUDIO_CACHE;
     }).map(function (name) {
       return caches.delete(name);
     }));
@@ -97,6 +98,11 @@ self.addEventListener('fetch', function (event) {
 
   if (/\/images\/characters\/[a-z0-9-]+(?:-blink)?\.webp$/i.test(url.pathname)) {
     event.respondWith(cacheFirst(request, CHARACTER_CACHE));
+    return;
+  }
+
+  if (/\/sounds\/[a-z0-9_-]+\.mp3$/i.test(url.pathname)) {
+    event.respondWith(cacheFirst(request, AUDIO_CACHE));
     return;
   }
 

@@ -113,25 +113,34 @@
 | サウンドID | 現在の参照パス | イベント／操作 | 再生タイミング | 優先度 | 状態 |
 |---|---|---|---|---|---|
 | `spotArrived` | `sounds/se-spot-arrived.mp3` | `gps:spot-arrived` | スポット到着 | B | 未配置・接続済み |
-| `characterFound` | `sounds/se-character-found.mp3` | `character:acquired`、AR開始時の直接呼出 | 取得時。AR開始時にも直接再生 | A | 未配置・接続済み |
-| `levelUp` | `sounds/se-level-up.mp3` | `character:levelup` | レベルアップ時 | B | 未配置・接続済み |
+| `character-discovery` | `sounds/se_discover.mp3` | `ar:discovered` | 通常キャラクター発見 | A | 正式配置済み・接続済み |
+| `capture-success` | `sounds/se_capture.mp3` | `ar:captured` | 捕獲成功時のみ | A | 正式配置済み・接続済み |
+| `level-up` | `sounds/se_levelup.mp3` | `character:levelup` | レベルアップ | A | 正式配置済み・接続済み |
+| `achievement-unlock` | `sounds/se_levelup.mp3` | `achievement:unlock` | Achievement解除 | A | 正式配置済み・接続済み |
+| `point-earned` | `sounds/se_point.mp3` | `game:points-changed` | ポイント加算成功 | A | 正式配置済み・接続済み |
 | `couponReceived` | `sounds/se-coupon-received.mp3` | `coupon:acquired` | クーポン取得時 | B | 未配置・接続済み |
-| `button` | `sounds/se-button.mp3` | buttonまたは`data-action`のクリック | UIボタン操作時 | A | 未配置・接続済み |
-| `characterVoice` | 実行時に各`definition.sound`を設定 | AR開始時の直接呼出 | カメラAR開始後 | B/C | 20件すべて未配置 |
-| `rareCharacter` | 実行時に各`definition.sound`を設定 | AR開始時の直接呼出 | epic／legendaryのカメラAR開始後 | B/C | 個別音声と同一ファイル |
+| `button-tap` | `sounds/se_click.mp3` | 通常のbuttonまたは`data-action`クリック | 基本UI操作（専用SE対象を除く） | A | 正式配置済み・接続済み |
 
-### Version 1.0向け追加推奨サウンド
+### キャラクター専用発見SE
+
+| Character ID | 正式音源 | 発見時の優先動作 | 状態 |
+|---|---|---|---|
+| `hino-gold` | `sounds/ch_golden_ebi.mp3` | 通常発見SEに代えて再生 | 正式配置済み・接続済み |
+| `castle-crisp` | `sounds/ch_honoo_shogun_ebi.mp3` | 通常発見SEに代えて再生 | 正式配置済み・接続済み |
+| `yamamori` | `sounds/ch_ninja_ebi.mp3` | 通常発見SEに代えて再生 | 正式配置済み・接続済み |
+| `satoyama-knight` | `sounds/ch_ryujin_ebi.mp3` | 通常発見SEに代えて再生 | 正式配置済み・接続済み |
+| `queen-tartar` | `sounds/ch_niji_ebi.mp3` | 通常発見SEに代えて再生 | 正式配置済み・接続済み |
+
+専用発見SEのないキャラクターは`sounds/se_discover.mp3`へフォールバックします。専用SEと通常発見SEは同時再生しません。Audio-1では正式シャッター音とBGMを追加していないため、`photo:captured`は無音、冒険BGMは未配置のままです。
+
+### Version 1.0向け未配置サウンド
 
 以下はPriority A要件ですが、現在の`DEFAULT_ASSETS`には定義がありません。本番コードへ導入する段階でEventBus接続が必要です。
 
 | 推奨サウンドID | 推奨配置パス | 接続候補イベント | 用途 | 優先度 | 状態 |
 |---|---|---|---|---|---|
-| `captureSuccess` | `sounds/se-capture-success.mp3` | `ar:captured` | 捕獲成功 | A | 未定義・未配置 |
 | `questComplete` | `sounds/se-quest-complete.mp3` | `quest:complete` | Quest達成 | A | 未定義・未配置 |
-| `achievementUnlock` | `sounds/se-achievement-unlock.mp3` | `achievement:unlock` | Achievement解除 | A | 未定義・未配置 |
 | `ending` | `sounds/bgm-ending.mp3` | `ending:start`または`ending:credit` | エンディング／スタッフロール | A | 未定義・未配置 |
-
-「発見音」は既存の`se-character-found.mp3`を使用します。捕獲成功音とは役割を分けます。
 
 ## 5. 音声推奨仕様
 
