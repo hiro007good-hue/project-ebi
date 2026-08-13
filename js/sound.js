@@ -283,6 +283,7 @@
       if (!event.target.closest) return;
       var control = event.target.closest('button,[data-action]');
       if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim]')) return;
+      if (!unlocked) unlock();
       playSe('button-tap');
     };
     global.document.addEventListener('pointerdown', gestureHandler, true);
