@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Project EBI iPhone Audio Runtime Diagnostic</title>
   <style>
-    :root{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;color:#26231f;background:#f7f3e8}*{box-sizing:border-box}body{margin:0}main{max-width:44rem;margin:auto;padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}h1{font-size:1.5rem}.note{line-height:1.6}section{margin:16px 0;padding:16px;border:1px solid #d8cdbb;border-radius:12px;background:#fff}h2{font-size:1.05rem}button{width:100%;min-height:48px;padding:12px;border:0;border-radius:10px;background:#c94818;color:#fff;font:inherit;font-weight:700;touch-action:manipulation}button:focus-visible{outline:3px solid #155eef;outline-offset:3px}dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 12px}dt{font-weight:700}dd{min-width:0;margin:0;overflow-wrap:anywhere}.result{padding:12px;min-height:3rem;border-radius:8px;background:#f3f0ea;white-space:pre-wrap;overflow-wrap:anywhere}.ok{color:#116329}.error{color:#a01818}
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;color:#26231f;background:#f7f3e8}*{box-sizing:border-box}body{margin:0}main{max-width:44rem;margin:auto;padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}h1{font-size:1.5rem}.note{line-height:1.6}section{margin:16px 0;padding:16px;border:1px solid #d8cdbb;border-radius:12px;background:#fff}h2{font-size:1.05rem}.format{margin-top:16px;padding-top:16px;border-top:1px solid #d8cdbb}.format:first-of-type{margin-top:0;padding-top:0;border-top:0}.format h3{margin:0 0 10px;font-size:1rem}button{width:100%;min-height:48px;padding:12px;border:0;border-radius:10px;background:#c94818;color:#fff;font:inherit;font-weight:700;touch-action:manipulation}button:focus-visible{outline:3px solid #155eef;outline-offset:3px}dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 12px}dt{font-weight:700}dd{min-width:0;margin:0;overflow-wrap:anywhere}.result{padding:12px;min-height:3rem;border-radius:8px;background:#f3f0ea;white-space:pre-wrap;overflow-wrap:anywhere}.ok{color:#116329}.error{color:#a01818}
   </style>
 </head>
 <body>
@@ -18,6 +18,13 @@
     <section id="ar-search"><h2>TEST 2「AudioContextを開始」</h2><button id="context" type="button">AudioContextを開始</button><p id="context-result" class="result" role="status" aria-live="polite">未実行</p></section>
     <section data-achievement-claim><h2>TEST 3「AudioManagerで再生」</h2><button id="manager" type="button">AudioManagerで再生</button><p id="manager-result" class="result" role="status" aria-live="polite">未実行</p></section>
     <section data-achievement-claim><h2>TEST 4「unlock状態確認」</h2><button id="state" type="button">unlock状態を確認</button><p id="state-result" class="result" role="status" aria-live="polite">未実行</p></section>
+    <section data-achievement-claim>
+      <h2>TEST 5「音声形式比較」</h2>
+      <p class="note">各形式を個別にタップし、Safariとホーム画面PWAで結果を比較してください。</p>
+      <article class="format"><h3>A: 現行MP3</h3><dl><dt>URL</dt><dd>./sounds/se_click.mp3</dd><dt>HTTP status</dt><dd id="compare-mp3-status">確認中</dd><dt>Content-Type</dt><dd id="compare-mp3-mime">確認中</dd><dt>canPlayType()</dt><dd id="compare-mp3-can-play">確認中</dd></dl><button id="compare-mp3" type="button">MP3を再生</button><p id="compare-mp3-result" class="result" role="status" aria-live="polite">未実行</p></article>
+      <article class="format"><h3>B: 比較用M4A / AAC-LC</h3><dl><dt>URL</dt><dd>./sounds/test-click.m4a</dd><dt>HTTP status</dt><dd id="compare-m4a-status">確認中</dd><dt>Content-Type</dt><dd id="compare-m4a-mime">確認中</dd><dt>canPlayType()</dt><dd id="compare-m4a-can-play">確認中</dd></dl><button id="compare-m4a" type="button">M4A / AACを再生</button><p id="compare-m4a-result" class="result" role="status" aria-live="polite">未実行</p></article>
+      <article class="format"><h3>C: 比較用WAV / PCM</h3><dl><dt>URL</dt><dd>./sounds/test-click.wav</dd><dt>HTTP status</dt><dd id="compare-wav-status">確認中</dd><dt>Content-Type</dt><dd id="compare-wav-mime">確認中</dd><dt>canPlayType()</dt><dd id="compare-wav-can-play">確認中</dd></dl><button id="compare-wav" type="button">WAVを再生</button><p id="compare-wav-result" class="result" role="status" aria-live="polite">未実行</p></article>
+    </section>
   </main>
   <script src="./js/config.js"></script>
   <script src="./js/sound.js?rev=audio-1-unlock"></script>
@@ -29,6 +36,29 @@
       function errorText(error){return(error&&error.name||'Error')+': '+(error&&error.message||String(error||'不明なエラー'))}
       function show(id,text,ok){var node=el(id);node.textContent=text;node.className='result '+(ok?'ok':'error')}
       function audioManager(){return window.EbiAR&&(EbiAR.AudioManager||EbiAR.sound)}
+      function auditFormat(item){
+        var probe=new Audio();
+        fetch(item.url,{method:'HEAD',cache:'no-store',credentials:'same-origin'}).then(function(response){
+          var contentType=response.headers.get('Content-Type')||'';
+          el('compare-'+item.id+'-status').textContent=response.status+' '+response.statusText;
+          el('compare-'+item.id+'-mime').textContent=contentType||'(ヘッダーなし)';
+          el('compare-'+item.id+'-can-play').textContent='応答MIME: '+(probe.canPlayType(contentType)||'(空文字)')+' / 標準MIME: '+(probe.canPlayType(item.standardType)||'(空文字)');
+        }).catch(function(error){
+          el('compare-'+item.id+'-status').textContent='取得失敗';
+          el('compare-'+item.id+'-mime').textContent=errorText(error);
+          el('compare-'+item.id+'-can-play').textContent='標準MIME: '+(probe.canPlayType(item.standardType)||'(空文字)');
+        });
+        el('compare-'+item.id).addEventListener('click',async function(){
+          try{
+            var audio=new Audio(item.url);
+            audio.volume=1;
+            await audio.play();
+            show('compare-'+item.id+'-result','play() Promise：成功\n再生開始成功',true);
+          }catch(error){
+            show('compare-'+item.id+'-result','play() Promise：失敗\nerror.name：'+(error.name||'Error')+'\nerror.message：'+(error.message||String(error)),false);
+          }
+        });
+      }
       el('url').textContent=soundUrl.href;
       el('mode').textContent=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true?'ホーム画面PWA (standalone)':'Safari (browser)';
       fetch(soundUrl.href,{method:'HEAD',cache:'no-store',credentials:'same-origin'}).then(function(response){el('status').textContent=response.status+' '+response.statusText;el('mime').textContent=response.headers.get('Content-Type')||'(ヘッダーなし)';show('fetch',response.ok?'音源URLの応答確認成功':'音源URLの応答確認失敗',response.ok)}).catch(function(error){el('status').textContent='取得失敗';el('mime').textContent='取得失敗';show('fetch','fetch失敗\nError: '+errorText(error),false)});
@@ -36,6 +66,7 @@
       el('context').addEventListener('click',async function(){try{var Context=window.AudioContext||window.webkitAudioContext;if(!Context)throw new Error('AudioContext / webkitAudioContext が利用できません');context=context||new Context();if(context.state==='suspended')await context.resume();show('context-result','AudioContext：'+context.state,context.state==='running')}catch(error){show('context-result','AudioContext：失敗\nError: '+errorText(error),false)}});
       el('manager').addEventListener('click',async function(){var api=audioManager(),captured=null,off=function(){};try{if(!api)throw new Error('AudioManagerが読み込まれていません');if(EbiAR.events)off=EbiAR.events.on('audio:error',function(detail){captured=detail&&detail.error});var unlocked=await api.unlock();var played=await api.playSe('button-tap');if(!played)throw captured||new Error('playSe が false を返しました');show('manager-result','AudioManager：成功\nunlock：'+unlocked+'\n再生開始成功',true)}catch(error){show('manager-result','AudioManager：失敗\nError: '+errorText(captured||error),false)}finally{off()}});
       el('state').addEventListener('click',function(){try{var api=audioManager();if(!api)throw new Error('AudioManagerが読み込まれていません');var value=api.getState();show('state-result',['AudioManager initialize状態：初期化済み','unlock状態：'+value.unlocked,'AudioContext.state：'+(context?context.state:'未生成'),'SE：'+(value.seEnabled?'ON':'OFF'),'SE Volume：'+value.seVolume].join('\n'),true)}catch(error){show('state-result','unlock状態確認：失敗\nError: '+errorText(error),false)}});
+      [{id:'mp3',url:'./sounds/se_click.mp3',standardType:'audio/mpeg'},{id:'m4a',url:'./sounds/test-click.m4a',standardType:'audio/mp4; codecs="mp4a.40.2"'},{id:'wav',url:'./sounds/test-click.wav',standardType:'audio/wav'}].forEach(auditFormat);
     })();
   </script>
 </body>
