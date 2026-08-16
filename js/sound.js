@@ -49,6 +49,9 @@
   var destroyed = false;
   var fadeTimers = new WeakMap();
   var activeSe = new Set();
+  var seEntries = new Map();
+  var seEntryByAudio = new WeakMap();
+  var currentBgmEntry = null;
   var subscriptions = [];
   var gestureHandler = null;
   var buttonHandler = null;
@@ -72,17 +75,53 @@
   function channelVolume(channel) { return masterVolume * (channel === 'bgm' ? settings.bgmVolume : settings.seVolume); }
   function channelEnabled(channel) { return channel === 'bgm' ? settings.bgmEnabled : settings.seEnabled; }
 
-  /** 必要になった時だけAudio要素を生成する。失敗はゲーム進行へ伝播させない。 */
-  function createAudio(source, loop) {
+  function mediaLoadError(audio) {
+    var error = new Error(audio && audio.error && audio.error.message || 'audio_load_failed');
+    if (audio && audio.error) error.code = audio.error.code;
+    return error;
+  }
+
+  /** 初回要求時だけ明示loadし、全要求で同じREADY判定を共有する。 */
+  function createAudioEntry(source, loop) {
     if (!canUseAudio() || !source) return null;
     var audio;
     try { audio = new global.Audio(); }
     catch (error) { audioError(source, error); return null; }
-    audio.preload = 'none';
-    audio.loop = !!loop;
-    audio.src = source;
-    audio.addEventListener('error', function () { audioError(source, new Error('audio_load_failed')); }, { once: true });
-    return audio;
+    var entry = { audio: audio, source: source, state: 'LOADING', ready: null, cancel: null, pendingPlay: null };
+    entry.ready = new Promise(function (resolve) {
+      var settled = false;
+      function cleanup() {
+        audio.removeEventListener('canplay', onCanPlay);
+        audio.removeEventListener('error', onError);
+        audio.removeEventListener('abort', onError);
+      }
+      function settle(ready, error) {
+        if (settled) return;
+        settled = true;
+        entry.state = ready ? 'READY' : 'ERROR';
+        cleanup();
+        if (error) audioError(source, error);
+        resolve(ready);
+      }
+      function onCanPlay() {
+        if (!audio.error && audio.readyState >= 3) settle(true);
+      }
+      function onError() { settle(false, mediaLoadError(audio)); }
+      entry.cancel = function () { settle(false); };
+      audio.addEventListener('canplay', onCanPlay);
+      audio.addEventListener('error', onError);
+      audio.addEventListener('abort', onError);
+      audio.preload = 'auto';
+      audio.loop = !!loop;
+      audio.src = source;
+      try {
+        audio.load();
+        if (!audio.error && audio.readyState >= 3) settle(true);
+      } catch (error) {
+        settle(false, error);
+      }
+    });
+    return entry;
   }
   function attemptPlay(audio, id) {
     if (!audio) return Promise.resolve(false);
@@ -102,10 +141,14 @@
     if (timer) global.clearInterval(timer);
     fadeTimers.delete(audio);
   }
-  function releaseSe(audio) {
+  function releaseSe(audio, discard) {
     if (!audio) return;
     clearFade(audio);
     activeSe.delete(audio);
+    if (!discard && seEntryByAudio.has(audio)) {
+      try { audio.currentTime = 0; } catch (error) { /* READY音源は次回要求で再利用する。 */ }
+      return;
+    }
     try { audio.removeAttribute('src'); audio.load(); } catch (error) { /* 解放失敗はゲームへ影響させない。 */ }
   }
 
@@ -171,13 +214,22 @@
     if (!source || !canUseAudio() || destroyed) return Promise.resolve(false);
     if (!settings.bgmEnabled || global.document?.hidden) { pendingBgmId = id; return Promise.resolve(false); }
     if (!unlocked) { pendingBgmId = id; emit('audio:blocked', { id: id, reason: 'user_gesture_required' }); return Promise.resolve(false); }
-    if (currentBgmId === id && currentBgm) return attemptPlay(currentBgm, id);
+    if (currentBgmId === id && currentBgm && currentBgmEntry) {
+      return currentBgmEntry.ready.then(function (ready) {
+        return ready && currentBgmEntry && currentBgmEntry.state === 'READY' ? attemptPlay(currentBgm, id) : false;
+      });
+    }
     stopBgm();
-    currentBgm = createAudio(source, true);
+    currentBgmEntry = createAudioEntry(source, true);
+    currentBgm = currentBgmEntry && currentBgmEntry.audio;
     currentBgmId = id;
     if (!currentBgm) return Promise.resolve(false);
-    currentBgm.volume = options.fadeMs ? 0 : channelVolume('bgm');
-    return attemptPlay(currentBgm, id).then(function (played) {
+    var requestedEntry = currentBgmEntry;
+    return requestedEntry.ready.then(function (ready) {
+      if (!ready || currentBgmEntry !== requestedEntry || !settings.bgmEnabled || global.document?.hidden || destroyed) return false;
+      currentBgm.volume = options.fadeMs ? 0 : channelVolume('bgm');
+      return attemptPlay(currentBgm, id);
+    }).then(function (played) {
       if (played && options.fadeMs) return fade(currentBgm, channelVolume('bgm'), options.fadeMs).then(function () { return true; });
       return played;
     });
@@ -185,14 +237,26 @@
   function stopBgm() {
     if (!currentBgm) { currentBgmId = null; return false; }
     clearFade(currentBgm);
+    if (currentBgmEntry && currentBgmEntry.cancel) currentBgmEntry.cancel();
     try { currentBgm.pause(); currentBgm.currentTime = 0; }
     catch (error) { /* 停止失敗はゲームへ影響させない。 */ }
+    try { currentBgm.removeAttribute('src'); currentBgm.load(); } catch (error) { /* 解放失敗はゲームへ影響させない。 */ }
     currentBgm = null;
+    currentBgmEntry = null;
     currentBgmId = null;
     resumeBgmOnVisible = false;
     return true;
   }
-  /** SEを必要時だけ生成する。複数SEの同時再生に対応する。 */
+  function playReadySe(entry, id, options) {
+    var audio = entry.audio;
+    if (entry.state !== 'READY' || !channelEnabled('se') || destroyed) return Promise.resolve(false);
+    try { audio.currentTime = 0; } catch (error) { audioError(id, error); return Promise.resolve(false); }
+    audio.volume = clamp(options.volume, channelVolume('se'));
+    activeSe.add(audio);
+    return attemptPlay(audio, id).then(function (played) { if (!played) releaseSe(audio); return played; });
+  }
+
+  /** SEを初回要求時だけloadし、READY後は同じAudio要素を再利用する。 */
   function playSe(id, options) {
     options = options || {};
     var source = assets.se[id];
@@ -202,12 +266,29 @@
     var timestamp = Date.now();
     if (cooldownMs && timestamp - (lastPlayedAt.get(cooldownKey) || 0) < cooldownMs) return Promise.resolve(false);
     lastPlayedAt.set(cooldownKey, timestamp);
-    var audio = createAudio(source, false);
-    if (!audio) return Promise.resolve(false);
-    audio.volume = clamp(options.volume, channelVolume('se'));
-    activeSe.add(audio);
-    audio.addEventListener('ended', function () { releaseSe(audio); }, { once: true });
-    return attemptPlay(audio, id).then(function (played) { if (!played) releaseSe(audio); return played; });
+    var entry = seEntries.get(source);
+    if (!entry) {
+      entry = createAudioEntry(source, false);
+      if (!entry) return Promise.resolve(false);
+      entry.endedHandler = function () { releaseSe(entry.audio); };
+      entry.audio.addEventListener('ended', entry.endedHandler);
+      seEntries.set(source, entry);
+      seEntryByAudio.set(entry.audio, entry);
+    }
+    if (entry.state === 'ERROR') return Promise.resolve(false);
+    if (entry.state === 'READY') return playReadySe(entry, id, options);
+    if (entry.pendingPlay) return entry.pendingPlay;
+    entry.pendingPlay = entry.ready.then(function (ready) {
+      return ready ? playReadySe(entry, id, options) : false;
+    }).then(function (played) {
+      entry.pendingPlay = null;
+      return played;
+    }, function (error) {
+      entry.pendingPlay = null;
+      audioError(id, error);
+      return false;
+    });
+    return entry.pendingPlay;
   }
 
   function configure(nextAssets) {
@@ -295,6 +376,12 @@
     disconnectEvents();
     stopBgm();
     activeSe.forEach(function (audio) { try { audio.pause(); } finally { releaseSe(audio); } });
+    seEntries.forEach(function (entry) {
+      if (entry.cancel) entry.cancel();
+      if (entry.endedHandler) entry.audio.removeEventListener('ended', entry.endedHandler);
+      try { entry.audio.pause(); } finally { releaseSe(entry.audio, true); }
+    });
+    seEntries.clear();
     if (global.document && gestureHandler) {
       global.document.removeEventListener('pointerdown', gestureHandler, true);
       global.document.removeEventListener('keydown', gestureHandler, true);
