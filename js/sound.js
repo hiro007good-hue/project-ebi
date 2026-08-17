@@ -76,7 +76,9 @@
     playCalls: 0, lastPlayAt: '-', resolvedKey: '-', resolvedUrl: '-',
     sourceId: null, sourceCreated: false, gainCreated: false, sourceConnected: false, destinationConnected: false,
     computedGain: null, startAt: null, endedAt: null,
-    errorStage: '-', errorName: '-', errorMessage: '-', directResult: 'NOT_RUN'
+    errorStage: '-', errorName: '-', errorMessage: '-', directResult: 'NOT_RUN',
+    bufferWriter: '-', bufferSubsystem: '-', bufferRetryCount: 0,
+    lastSeError: null, lastBgmError: null, lastClickError: null
   };
   var lastPlayedAt = new Map();
   var SPECIAL_DISCOVERY_SE = Object.freeze({
@@ -121,6 +123,7 @@
       '',
       'se_click.mp3',
       ' buffer=' + traceState.bufferStatus + ' bufferId=' + traceValue(traceState.bufferId) + ' cacheHits=' + traceState.bufferCacheHits,
+      ' retryCount=' + traceState.bufferRetryCount + ' writer=' + traceState.bufferWriter + ' subsystem=' + traceState.bufferSubsystem,
       ' fetch=' + (traceState.fetchStarted ? (traceState.fetchSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED') + ' decode=' + (traceState.decodeStarted ? (traceState.decodeSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED'),
       ' duration=' + traceValue(traceState.bufferDuration) + ' sampleRate=' + traceValue(traceState.bufferSampleRate) + ' channels=' + traceValue(traceState.bufferChannels) + ' length=' + traceValue(traceState.bufferLength),
       '',
@@ -136,6 +139,13 @@
       ' stage=' + traceState.errorStage + ' name=' + traceState.errorName,
       ' message=' + traceState.errorMessage,
       '',
+      'Last se_click error',
+      formatTraceError(traceState.lastClickError),
+      'Last SE error',
+      formatTraceError(traceState.lastSeError),
+      'Last BGM error',
+      formatTraceError(traceState.lastBgmError),
+      '',
       'Timeline',
       traceLines.length ? traceLines.join('\n') : '(waiting)'
     ].join('\n');
@@ -145,6 +155,32 @@
     if (traceLines.length > 80) traceLines.shift();
     renderTrace();
   }
+  function formatTraceError(record) {
+    return record ? ' key=' + record.key + ' url=' + record.url + ' stage=' + record.stage + ' name=' + record.name + '\n message=' + record.message : ' (none)';
+  }
+  function audioChannel(id) {
+    var seKeys = Object.keys(assets.se);
+    for (var seIndex = 0; seIndex < seKeys.length; seIndex += 1) {
+      if (seKeys[seIndex] === id || assets.se[seKeys[seIndex]] === id) return 'se';
+    }
+    var bgmKeys = Object.keys(assets.bgm);
+    for (var bgmIndex = 0; bgmIndex < bgmKeys.length; bgmIndex += 1) {
+      if (bgmKeys[bgmIndex] === id || assets.bgm[bgmKeys[bgmIndex]] === id) return 'bgm';
+    }
+    return null;
+  }
+  function errorRecord(id, error, stage) {
+    var channel = audioChannel(id);
+    var url = channel === 'se' && assets.se[id] || channel === 'bgm' && assets.bgm[id] || id;
+    var key = channel === 'se' ? seKeyForSource(url) : id;
+    return {
+      key: key,
+      url: url,
+      stage: stage || id || 'unknown',
+      name: error && error.name || 'Error',
+      message: error && error.message || String(error || 'unknown error')
+    };
+  }
   function traceError(stage, error) {
     traceState.errorStage = stage || 'unknown';
     traceState.errorName = error && error.name || 'Error';
@@ -152,6 +188,14 @@
     trace('ERROR ' + traceState.errorStage + ': ' + traceState.errorName + ' ' + traceState.errorMessage);
   }
   function audioError(id, error, stage) {
+    var channel = audioChannel(id);
+    var record = errorRecord(id, error, stage);
+    if (channel === 'se') {
+      traceState.lastSeError = record;
+      if (isTraceClickSource(id) || id === 'button-tap' || id === 'buttonTap') traceState.lastClickError = record;
+    } else if (channel === 'bgm') {
+      traceState.lastBgmError = record;
+    }
     traceError(stage || id || 'unknown', error);
     emit('audio:error', { id: id, error: error, stage: stage || id || 'unknown' });
   }
@@ -327,13 +371,22 @@
   function setSeBufferState(entry, nextState, writer, error) {
     var previousState = entry.state || 'NOT_LOADED';
     entry.state = nextState;
-    if (isTraceClickSource(entry.source)) traceState.bufferStatus = nextState;
-    var message = 'SE buffer state change: ' + previousState + ' -> ' + nextState
-      + ' key=' + seKeyForSource(entry.source)
+    if (isTraceClickSource(entry.source)) {
+      traceState.bufferStatus = nextState;
+      traceState.bufferWriter = writer;
+      traceState.bufferSubsystem = 'webaudio';
+      traceState.bufferRetryCount = entry.retryCount;
+    }
+    var message = 'SE buffer state change:'
+      + ' soundKey=' + seKeyForSource(entry.source)
       + ' URL=' + entry.source
+      + ' oldState=' + previousState
+      + ' newState=' + nextState
       + ' writer=' + writer
-      + ' subsystem=webaudio';
-    if (error) message += ' error=' + (error.name || 'Error') + ' message=' + (error.message || String(error));
+      + ' subsystem=webaudio'
+      + ' error.name=' + (error && error.name || '-')
+      + ' error.message=' + (error && error.message || '-')
+      + ' retryCount=' + entry.retryCount;
     trace(message);
   }
   function loadSeBuffer(source, options) {
@@ -366,6 +419,7 @@
   }
   function startSeBufferLoad(entry) {
     var source = entry.source;
+    if (entry.state === 'RETRY') setSeBufferState(entry, 'LOADING', 'startSeBufferLoad');
     var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
     entry.controller = controller;
     var context = getSeAudioContext();
@@ -686,7 +740,15 @@
     if (entry.state === 'ERROR') return Promise.resolve(false);
     if (entry.state === 'READY') return playDecodedSe(entry, id, options);
     return entry.promise.then(function (buffer) {
-      return buffer ? playDecodedSe(entry, id, options) : false;
+      if (buffer) return playDecodedSe(entry, id, options);
+      if (entry.state !== 'ERROR' || entry.retryCount >= 1) return false;
+      trace("playSe('" + id + "') initial load failed; explicit request starts one retry");
+      var retryEntry = loadSeBuffer(source, { retryError: true });
+      if (retryEntry.state === 'READY') return playDecodedSe(retryEntry, id, options);
+      if (retryEntry.state === 'ERROR') return false;
+      return retryEntry.promise.then(function (retryBuffer) {
+        return retryBuffer ? playDecodedSe(retryEntry, id, options) : false;
+      });
     }, function (error) {
       audioError(id, error, 'buffer-await');
       return false;
