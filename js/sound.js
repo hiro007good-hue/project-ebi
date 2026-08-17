@@ -52,6 +52,10 @@
   var seBufferEntries = new Map();
   var seAudioContext = null;
   var seUnlockPromise = null;
+  var seUnlockAttempt = null;
+  var resumeAttemptSequence = 0;
+  var activationSequence = 0;
+  var currentActivationId = 0;
   var seContextFailed = false;
   var currentBgmEntry = null;
   var subscriptions = [];
@@ -81,6 +85,8 @@
     lastSeError: null, lastBgmError: null, lastClickError: null
   };
   var lastPlayedAt = new Map();
+  var RESUME_STALL_MS = 1000;
+  var RESUME_STATE_POLL_MS = 50;
   var SPECIAL_DISCOVERY_SE = Object.freeze({
     'hino-gold': 'discover-hino-gold',
     'castle-crisp': 'discover-castle-crisp',
@@ -526,17 +532,85 @@
     });
   }
 
+  function beginUserActivation() {
+    var activationId = ++activationSequence;
+    currentActivationId = activationId;
+    Promise.resolve().then(function () {
+      if (currentActivationId === activationId) currentActivationId = 0;
+    });
+    return activationId;
+  }
+
+  function activationPulse(context, attemptId) {
+    var source;
+    var gain;
+    var cleaned = false;
+    function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
+      try { if (source) source.disconnect(); } catch (error) { /* pulse cleanup失敗はunlockを妨げない。 */ }
+      try { if (gain) gain.disconnect(); } catch (error) { /* pulse cleanup失敗はunlockを妨げない。 */ }
+      trace('resume attempt #' + attemptId + ' activation pulse ended');
+    }
+    try {
+      source = context.createBufferSource();
+      gain = context.createGain();
+      source.buffer = context.createBuffer(1, 1, Number(context.sampleRate) || 44100);
+      gain.gain.value = 0;
+      source.connect(gain);
+      gain.connect(context.destination);
+      trace('resume attempt #' + attemptId + ' activation pulse created, gain=0');
+      source.onended = cleanup;
+      source.start(0);
+      trace('resume attempt #' + attemptId + ' activation pulse started');
+      return cleanup;
+    } catch (error) {
+      try { if (source) source.disconnect(); } catch (disconnectError) { /* cleanup失敗は無視する。 */ }
+      try { if (gain) gain.disconnect(); } catch (disconnectError) { /* cleanup失敗は無視する。 */ }
+      trace('resume attempt #' + attemptId + ' activation pulse failed: ' + (error.name || 'Error') + ' ' + (error.message || String(error)));
+      return null;
+    }
+  }
+
+  function completeUnlockAttempt(attempt, success, reason) {
+    if (!attempt || attempt.completed) return;
+    attempt.completed = true;
+    if (attempt.pollTimer) global.clearInterval(attempt.pollTimer);
+    if (attempt.stallTimer) global.clearTimeout(attempt.stallTimer);
+    if (attempt.pulseCleanup) attempt.pulseCleanup();
+    success = !!success && attempt.context.state === 'running';
+    unlocked = success;
+    traceContext();
+    trace('resume attempt #' + attempt.id + ' unlock attempt completed: ' + reason + ', state=' + attempt.context.state);
+    trace(success ? 'unlock success: AudioContext running' : 'unlock failure: AudioContext ' + attempt.context.state);
+    if (seUnlockAttempt === attempt) {
+      seUnlockAttempt = null;
+      seUnlockPromise = null;
+    }
+    if (success) {
+      primeClickSeBuffer();
+      resumePendingBgm();
+    }
+    attempt.resolve(success);
+  }
+
   /** iPhone Safari/PWAのユーザー操作内で再生制限を解除する。 */
   function unlock() {
     if (!canUseAudio() && !canUseWebAudio()) return Promise.resolve(false);
     var context = getSeAudioContext();
-    trace('audio unlock requested, state before resume = ' + (context ? context.state : 'unavailable'));
+    var activationId = currentActivationId;
+    trace('audio unlock requested, state before resume = ' + (context ? context.state : 'unavailable') + ', activationId=' + activationId);
     if (!context) {
       unlocked = false;
       trace('unlock failure: AudioContext unavailable');
       return Promise.resolve(false);
     }
     if (context.state === 'running') {
+      if (seUnlockAttempt) {
+        var pendingPromise = seUnlockPromise;
+        completeUnlockAttempt(seUnlockAttempt, true, 'state running before Promise settlement');
+        return pendingPromise;
+      }
       unlocked = true;
       traceContext();
       trace('unlock success: AudioContext already running');
@@ -545,45 +619,64 @@
       return Promise.resolve(true);
     }
     unlocked = false;
-    if (seUnlockPromise) {
-      trace('unlockPromise reused');
-      return seUnlockPromise;
+    if (seUnlockAttempt && !seUnlockAttempt.completed) {
+      var elapsed = Date.now() - seUnlockAttempt.startedAt;
+      var staleActivation = activationId && seUnlockAttempt.activationId && activationId !== seUnlockAttempt.activationId;
+      if (staleActivation || elapsed >= RESUME_STALL_MS) {
+        trace('resume attempt #' + seUnlockAttempt.id + ' stale unlockPromise cleared, elapsed=' + elapsed + 'ms state=' + context.state);
+        completeUnlockAttempt(seUnlockAttempt, false, 'stale Promise cleared');
+      } else {
+        trace('unlockPromise reused: resume attempt #' + seUnlockAttempt.id + ', elapsed=' + elapsed + 'ms');
+        return seUnlockPromise;
+      }
     }
     if (typeof context.resume !== 'function') {
       trace('unlock failure: AudioContext.resume unavailable, state after resume = ' + context.state);
       return Promise.resolve(false);
     }
-    trace('resume requested, state before resume = ' + context.state);
+    var attempt = { id: ++resumeAttemptSequence, activationId: activationId, context: context, startedAt: Date.now(), completed: false, pollTimer: null, stallTimer: null, pulseCleanup: null, resolve: null, promise: null };
+    attempt.promise = new Promise(function (resolve) { attempt.resolve = resolve; });
+    seUnlockAttempt = attempt;
+    seUnlockPromise = attempt.promise;
+    trace('resume attempt #' + attempt.id + ' started, state=' + context.state + ', activationId=' + activationId);
     var resumeResult;
-    try { resumeResult = context.resume(); }
-    catch (error) {
-      trace('unlock failure: resume threw, state after resume = ' + context.state);
+    try {
+      trace('resume attempt #' + attempt.id + ' resume requested, state before resume = ' + context.state);
+      resumeResult = context.resume();
+      attempt.pulseCleanup = activationPulse(context, attempt.id);
+    } catch (error) {
+      trace('resume attempt #' + attempt.id + ' resume threw, state=' + context.state);
       audioError('audio-context', error, 'context-resume');
-      return Promise.resolve(false);
+      completeUnlockAttempt(attempt, false, 'resume threw');
+      return attempt.promise;
     }
-    var activePromise = Promise.resolve(resumeResult).then(function () {
-      trace('resume Promise resolved');
-      traceContext();
-      trace('state after resume = ' + context.state);
-      unlocked = context.state === 'running';
-      trace(unlocked ? 'unlock success: AudioContext running' : 'unlock failure: AudioContext ' + context.state);
-      if (unlocked) {
-        primeClickSeBuffer();
-        resumePendingBgm();
-      }
-      return unlocked;
+    if (context.state === 'running') completeUnlockAttempt(attempt, true, 'state running after activation');
+    if (!attempt.completed) {
+      attempt.pollTimer = global.setInterval(function () {
+        if (context.state === 'running') completeUnlockAttempt(attempt, true, 'state running while resume pending');
+      }, RESUME_STATE_POLL_MS);
+      attempt.stallTimer = global.setTimeout(function () {
+        var stallElapsed = Date.now() - attempt.startedAt;
+        if (context.state === 'running') {
+          completeUnlockAttempt(attempt, true, 'state running at stall boundary');
+          return;
+        }
+        trace('resume attempt #' + attempt.id + ' resume stalled after ' + stallElapsed + 'ms, state=' + context.state);
+        trace('resume attempt #' + attempt.id + ' stale unlockPromise cleared');
+        completeUnlockAttempt(attempt, false, 'resume stalled');
+      }, RESUME_STALL_MS);
+    }
+    Promise.resolve(resumeResult).then(function () {
+      if (attempt.completed) return;
+      trace('resume attempt #' + attempt.id + ' resume resolved, state after resume = ' + context.state);
+      completeUnlockAttempt(attempt, context.state === 'running', 'resume Promise resolved');
     }, function (error) {
-      unlocked = false;
-      traceContext();
-      trace('unlock failure: resume rejected, state after resume = ' + context.state);
+      if (attempt.completed) return;
+      trace('resume attempt #' + attempt.id + ' resume rejected, state=' + context.state);
       audioError('audio-context', error, 'context-resume');
-      return false;
+      completeUnlockAttempt(attempt, false, 'resume Promise rejected');
     });
-    seUnlockPromise = activePromise;
-    activePromise.then(function () {
-      if (seUnlockPromise === activePromise) seUnlockPromise = null;
-    });
-    return activePromise;
+    return attempt.promise;
   }
 
   function resumePendingBgm() {
@@ -822,6 +915,7 @@
   function installGestureUnlock() {
     if (!global.document || gestureHandler) return;
     gestureHandler = function () {
+      beginUserActivation();
       var handler = gestureHandler;
       unlock().then(function (ready) {
         if (!ready || gestureHandler !== handler) return;
@@ -831,6 +925,7 @@
       });
     };
     buttonHandler = function (event) {
+      beginUserActivation();
       if (!event.target.closest) return;
       var control = event.target.closest('button,[data-action]');
       if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim],#audio-runtime-trace')) return;
@@ -853,7 +948,10 @@
       }
     });
     seBufferEntries.clear();
+    if (seUnlockAttempt) completeUnlockAttempt(seUnlockAttempt, false, 'AudioManager destroyed');
+    seUnlockAttempt = null;
     seUnlockPromise = null;
+    currentActivationId = 0;
     if (seAudioContext && typeof seAudioContext.close === 'function') {
       try { Promise.resolve(seAudioContext.close()).catch(function (error) { audioError('audio-context', error); }); }
       catch (error) { audioError('audio-context', error); }
