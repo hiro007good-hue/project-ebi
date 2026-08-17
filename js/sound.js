@@ -317,7 +317,27 @@
       if (result && typeof result.then === 'function') result.then(succeed, fail);
     });
   }
-  function loadSeBuffer(source) {
+  function seKeyForSource(source) {
+    var keys = Object.keys(assets.se);
+    for (var index = 0; index < keys.length; index += 1) {
+      if (assets.se[keys[index]] === source) return keys[index];
+    }
+    return 'unknown';
+  }
+  function setSeBufferState(entry, nextState, writer, error) {
+    var previousState = entry.state || 'NOT_LOADED';
+    entry.state = nextState;
+    if (isTraceClickSource(entry.source)) traceState.bufferStatus = nextState;
+    var message = 'SE buffer state change: ' + previousState + ' -> ' + nextState
+      + ' key=' + seKeyForSource(entry.source)
+      + ' URL=' + entry.source
+      + ' writer=' + writer
+      + ' subsystem=webaudio';
+    if (error) message += ' error=' + (error.name || 'Error') + ' message=' + (error.message || String(error));
+    trace(message);
+  }
+  function loadSeBuffer(source, options) {
+    options = options || {};
     var existing = seBufferEntries.get(source);
     if (existing) {
       if (isTraceClickSource(source)) {
@@ -325,19 +345,33 @@
         traceState.bufferStatus = existing.state;
         trace('se_click buffer cache hit = ' + existing.state + ', bufferId = ' + traceValue(existing.bufferId));
       }
-      return existing;
+      if (existing.state !== 'ERROR' || !options.retryError || existing.retryCount >= 1) return existing;
+      existing.retryCount += 1;
+      existing.buffer = null;
+      existing.bufferId = null;
+      existing.cancelled = false;
+      if (isTraceClickSource(source)) {
+        traceState.fetchStarted = false;
+        traceState.fetchSucceeded = false;
+        traceState.decodeStarted = false;
+        traceState.decodeSucceeded = false;
+      }
+      setSeBufferState(existing, 'RETRY', 'loadSeBuffer', existing.lastError);
+      return startSeBufferLoad(existing);
     }
-    var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
-    var entry = { source: source, state: 'LOADING', buffer: null, bufferId: null, promise: null, controller: controller, cancelled: false, errorStage: 'context' };
+    var entry = { source: source, state: 'NOT_LOADED', buffer: null, bufferId: null, promise: null, controller: null, cancelled: false, errorStage: 'context', lastError: null, retryCount: 0 };
     seBufferEntries.set(source, entry);
-    if (isTraceClickSource(source)) {
-      traceState.bufferStatus = 'LOADING';
-      trace('se_click buffer = LOADING');
-    }
+    setSeBufferState(entry, 'LOADING', 'loadSeBuffer');
+    return startSeBufferLoad(entry);
+  }
+  function startSeBufferLoad(entry) {
+    var source = entry.source;
+    var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
+    entry.controller = controller;
     var context = getSeAudioContext();
     if (!context) {
-      entry.state = 'ERROR';
-      if (isTraceClickSource(source)) traceState.bufferStatus = 'ERROR';
+      entry.lastError = new Error('audio_context_unavailable');
+      setSeBufferState(entry, 'ERROR', 'startSeBufferLoad', entry.lastError);
       entry.promise = Promise.resolve(null);
       return entry;
     }
@@ -370,9 +404,9 @@
       if (!buffer || entry.cancelled || destroyed) return null;
       entry.buffer = buffer;
       entry.bufferId = ++traceBufferSequence;
-      entry.state = 'READY';
+      entry.lastError = null;
+      setSeBufferState(entry, 'READY', 'loadSeBuffer');
       if (isTraceClickSource(source)) {
-        traceState.bufferStatus = 'READY';
         traceState.decodeSucceeded = true;
         traceState.bufferId = entry.bufferId;
         traceState.bufferDuration = buffer.duration;
@@ -383,8 +417,8 @@
       }
       return buffer;
     }).catch(function (error) {
-      entry.state = 'ERROR';
-      if (isTraceClickSource(source)) traceState.bufferStatus = 'ERROR';
+      entry.lastError = error;
+      setSeBufferState(entry, 'ERROR', 'loadSeBuffer', error);
       if (!entry.cancelled && !destroyed) audioError(source, error, entry.errorStage);
       return null;
     });
@@ -452,6 +486,7 @@
       unlocked = true;
       traceContext();
       trace('unlock success: AudioContext already running');
+      primeClickSeBuffer();
       resumePendingBgm();
       return Promise.resolve(true);
     }
@@ -478,7 +513,10 @@
       trace('state after resume = ' + context.state);
       unlocked = context.state === 'running';
       trace(unlocked ? 'unlock success: AudioContext running' : 'unlock failure: AudioContext ' + context.state);
-      if (unlocked) resumePendingBgm();
+      if (unlocked) {
+        primeClickSeBuffer();
+        resumePendingBgm();
+      }
       return unlocked;
     }, function (error) {
       unlocked = false;
@@ -499,6 +537,11 @@
     var id = pendingBgmId;
     pendingBgmId = null;
     playBgm(id).catch(function (error) { audioError(id, error, 'bgm-resume'); });
+  }
+
+  function primeClickSeBuffer() {
+    var source = assets.se['button-tap'];
+    if (source) loadSeBuffer(source);
   }
 
   /** BGMを遅延生成しループ再生する。ユーザー操作前は予約のみ行う。 */
@@ -639,7 +682,7 @@
     var timestamp = Date.now();
     if (cooldownMs && timestamp - (lastPlayedAt.get(cooldownKey) || 0) < cooldownMs) return Promise.resolve(false);
     lastPlayedAt.set(cooldownKey, timestamp);
-    var entry = loadSeBuffer(source);
+    var entry = loadSeBuffer(source, { retryError: true });
     if (entry.state === 'ERROR') return Promise.resolve(false);
     if (entry.state === 'READY') return playDecodedSe(entry, id, options);
     return entry.promise.then(function (buffer) {
@@ -803,5 +846,4 @@
   installTracePanel();
   installGestureUnlock();
   installLifecycle();
-  loadSeBuffer(assets.se['button-tap']);
 })(window);
