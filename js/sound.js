@@ -53,7 +53,6 @@
   var seAudioContext = null;
   var seUnlockPromise = null;
   var seUnlockAttempt = null;
-  var resumeAttemptSequence = 0;
   var activationSequence = 0;
   var currentActivationId = 0;
   var seContextFailed = false;
@@ -62,28 +61,6 @@
   var gestureHandler = null;
   var buttonHandler = null;
   var visibilityHandler = null;
-  var tracePointerHandler = null;
-  var tracePanel = null;
-  var traceOutput = null;
-  var traceDirectButton = null;
-  var traceDirectHandler = null;
-  var traceStyle = null;
-  var traceSourceSequence = 0;
-  var traceBufferSequence = 0;
-  var traceLines = [];
-  var traceState = {
-    initialized: false,
-    contextConstructor: 'NOT_CREATED', contextCount: 0, contextState: 'NOT_CREATED', contextSampleRate: null,
-    baseLatency: null, destinationChannels: null,
-    bufferStatus: 'NOT_LOADED', fetchStarted: false, fetchSucceeded: false, decodeStarted: false, decodeSucceeded: false,
-    bufferId: null, bufferDuration: null, bufferSampleRate: null, bufferChannels: null, bufferLength: null, bufferCacheHits: 0,
-    playCalls: 0, lastPlayAt: '-', resolvedKey: '-', resolvedUrl: '-',
-    sourceId: null, sourceCreated: false, gainCreated: false, sourceConnected: false, destinationConnected: false,
-    computedGain: null, startAt: null, endedAt: null,
-    errorStage: '-', errorName: '-', errorMessage: '-', directResult: 'NOT_RUN',
-    bufferWriter: '-', bufferSubsystem: '-', bufferRetryCount: 0,
-    lastSeError: null, lastBgmError: null, lastClickError: null
-  };
   var lastPlayedAt = new Map();
   var RESUME_STALL_MS = 1000;
   var RESUME_STATE_POLL_MS = 50;
@@ -103,157 +80,11 @@
   function webAudioConstructor() { return global.AudioContext || global.webkitAudioContext; }
   function canUseWebAudio() { return typeof webAudioConstructor() === 'function' && typeof global.fetch === 'function'; }
   function emit(name, detail) { if (EbiAR.events) EbiAR.events.emit(name, detail); }
-  function traceTimestamp() {
-    var date = new Date();
-    function pad(value, length) { return String(value).padStart(length, '0'); }
-    return pad(date.getHours(), 2) + ':' + pad(date.getMinutes(), 2) + ':' + pad(date.getSeconds(), 2) + '.' + pad(date.getMilliseconds(), 3);
-  }
-  function traceContext() {
-    if (!seAudioContext) return;
-    traceState.contextState = seAudioContext.state || 'unknown';
-    traceState.contextSampleRate = Number(seAudioContext.sampleRate) || null;
-    traceState.baseLatency = Number.isFinite(Number(seAudioContext.baseLatency)) ? Number(seAudioContext.baseLatency) : null;
-    traceState.destinationChannels = seAudioContext.destination && Number(seAudioContext.destination.channelCount) || null;
-  }
-  function traceValue(value) { return value === null || value === undefined ? '-' : String(value); }
-  function renderTrace() {
-    if (!traceOutput) return;
-    traceContext();
-    var computedGain = channelEnabled('se') ? channelVolume('se') : 0;
-    traceOutput.textContent = [
-      'AudioManager',
-      ' initialized=' + traceState.initialized + ' unlocked=' + unlocked,
-      ' context=' + traceState.contextConstructor + ' count=' + traceState.contextCount + ' state=' + traceState.contextState,
-      ' sampleRate=' + traceValue(traceState.contextSampleRate) + ' baseLatency=' + traceValue(traceState.baseLatency) + ' destination.channelCount=' + traceValue(traceState.destinationChannels),
-      ' seEnabled=' + settings.seEnabled + ' seVolume=' + settings.seVolume + ' masterVolume=' + masterVolume + ' computedGain=' + computedGain,
-      '',
-      'se_click.mp3',
-      ' buffer=' + traceState.bufferStatus + ' bufferId=' + traceValue(traceState.bufferId) + ' cacheHits=' + traceState.bufferCacheHits,
-      ' retryCount=' + traceState.bufferRetryCount + ' writer=' + traceState.bufferWriter + ' subsystem=' + traceState.bufferSubsystem,
-      ' fetch=' + (traceState.fetchStarted ? (traceState.fetchSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED') + ' decode=' + (traceState.decodeStarted ? (traceState.decodeSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED'),
-      ' duration=' + traceValue(traceState.bufferDuration) + ' sampleRate=' + traceValue(traceState.bufferSampleRate) + ' channels=' + traceValue(traceState.bufferChannels) + ' length=' + traceValue(traceState.bufferLength),
-      '',
-      'Playback',
-      ' calls=' + traceState.playCalls + ' last=' + traceState.lastPlayAt,
-      ' key=' + traceState.resolvedKey + ' url=' + traceState.resolvedUrl,
-      ' sourceId=' + traceValue(traceState.sourceId) + ' source=' + traceState.sourceCreated + ' gainNode=' + traceState.gainCreated,
-      ' source->gain=' + (traceState.sourceConnected ? 'connected' : 'not connected') + ' gain->destination=' + (traceState.destinationConnected ? 'connected' : 'not connected'),
-      ' gain=' + traceValue(traceState.computedGain) + ' start=' + traceValue(traceState.startAt) + ' ended=' + traceValue(traceState.endedAt),
-      ' directTest=' + traceState.directResult,
-      '',
-      'Last audio:error',
-      ' stage=' + traceState.errorStage + ' name=' + traceState.errorName,
-      ' message=' + traceState.errorMessage,
-      '',
-      'Last se_click error',
-      formatTraceError(traceState.lastClickError),
-      'Last SE error',
-      formatTraceError(traceState.lastSeError),
-      'Last BGM error',
-      formatTraceError(traceState.lastBgmError),
-      '',
-      'Timeline',
-      traceLines.length ? traceLines.join('\n') : '(waiting)'
-    ].join('\n');
-  }
-  function trace(message) {
-    traceLines.push('[' + traceTimestamp() + '] ' + message);
-    if (traceLines.length > 80) traceLines.shift();
-    renderTrace();
-  }
-  function formatTraceError(record) {
-    return record ? ' key=' + record.key + ' url=' + record.url + ' stage=' + record.stage + ' name=' + record.name + '\n message=' + record.message : ' (none)';
-  }
-  function audioChannel(id) {
-    var seKeys = Object.keys(assets.se);
-    for (var seIndex = 0; seIndex < seKeys.length; seIndex += 1) {
-      if (seKeys[seIndex] === id || assets.se[seKeys[seIndex]] === id) return 'se';
-    }
-    var bgmKeys = Object.keys(assets.bgm);
-    for (var bgmIndex = 0; bgmIndex < bgmKeys.length; bgmIndex += 1) {
-      if (bgmKeys[bgmIndex] === id || assets.bgm[bgmKeys[bgmIndex]] === id) return 'bgm';
-    }
-    return null;
-  }
-  function errorRecord(id, error, stage) {
-    var channel = audioChannel(id);
-    var url = channel === 'se' && assets.se[id] || channel === 'bgm' && assets.bgm[id] || id;
-    var key = channel === 'se' ? seKeyForSource(url) : id;
-    return {
-      key: key,
-      url: url,
-      stage: stage || id || 'unknown',
-      name: error && error.name || 'Error',
-      message: error && error.message || String(error || 'unknown error')
-    };
-  }
-  function traceError(stage, error) {
-    traceState.errorStage = stage || 'unknown';
-    traceState.errorName = error && error.name || 'Error';
-    traceState.errorMessage = error && error.message || String(error || 'unknown error');
-    trace('ERROR ' + traceState.errorStage + ': ' + traceState.errorName + ' ' + traceState.errorMessage);
-  }
   function audioError(id, error, stage) {
-    var channel = audioChannel(id);
-    var record = errorRecord(id, error, stage);
-    if (channel === 'se') {
-      traceState.lastSeError = record;
-      if (isTraceClickSource(id) || id === 'button-tap' || id === 'buttonTap') traceState.lastClickError = record;
-    } else if (channel === 'bgm') {
-      traceState.lastBgmError = record;
-    }
-    traceError(stage || id || 'unknown', error);
     emit('audio:error', { id: id, error: error, stage: stage || id || 'unknown' });
   }
   function channelVolume(channel) { return masterVolume * (channel === 'bgm' ? settings.bgmVolume : settings.seVolume); }
   function channelEnabled(channel) { return channel === 'bgm' ? settings.bgmEnabled : settings.seEnabled; }
-  function isTraceClickSource(source) { return source === assets.se['button-tap']; }
-
-  function installTracePanel() {
-    if (!global.document || !global.document.body || tracePanel) return;
-    traceStyle = global.document.createElement('style');
-    traceStyle.id = 'audio-runtime-trace-style';
-    traceStyle.textContent = '#audio-runtime-trace{position:fixed;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:12000;width:min(390px,calc(100vw - 16px));max-height:46vh;overflow:auto;border:1px solid #334155;border-radius:8px;background:#0f172eeF;color:#e2e8f0;box-shadow:0 4px 18px #0007;font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace}#audio-runtime-trace>summary{cursor:pointer;padding:8px 10px;font:700 12px/1.3 system-ui,sans-serif;touch-action:manipulation}#audio-runtime-trace .audio-trace-body{padding:0 10px 10px}#audio-runtime-trace button{width:100%;min-height:40px;margin:4px 0 8px;border:0;border-radius:6px;background:#f59e0b;color:#111827;font:700 13px system-ui,sans-serif;touch-action:manipulation}#audio-runtime-trace pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}';
-    tracePanel = global.document.createElement('details');
-    tracePanel.id = 'audio-runtime-trace';
-    var summary = global.document.createElement('summary');
-    summary.textContent = 'Audio-4 Runtime Trace';
-    var body = global.document.createElement('div');
-    body.className = 'audio-trace-body';
-    traceDirectButton = global.document.createElement('button');
-    traceDirectButton.type = 'button';
-    traceDirectButton.textContent = 'SEを直接鳴らす';
-    traceOutput = global.document.createElement('pre');
-    body.append(traceDirectButton, traceOutput);
-    tracePanel.append(summary, body);
-    global.document.head.appendChild(traceStyle);
-    global.document.body.appendChild(tracePanel);
-    tracePointerHandler = function (event) {
-      var target = event.target && event.target.closest && event.target.closest('[data-action="start"]');
-      if (!target) return;
-      traceLines = [];
-      tracePanel.open = true;
-      trace('pointerdown: adventure start');
-    };
-    traceDirectHandler = function () {
-      traceState.directResult = 'REQUESTED';
-      trace('direct SE test requested');
-      unlock().then(function (ready) {
-        if (!ready) return false;
-        return playSe('button-tap');
-      }).then(function (played) {
-        traceState.directResult = played ? 'PLAYED' : 'NOT_PLAYED';
-        trace('direct SE test result = ' + traceState.directResult);
-      }, function (error) {
-        traceState.directResult = 'ERROR';
-        audioError('button-tap', error, 'direct-test');
-      });
-    };
-    traceDirectButton.addEventListener('click', traceDirectHandler);
-    global.document.addEventListener('pointerdown', tracePointerHandler, true);
-    traceState.initialized = true;
-    trace('AudioManager initialized');
-  }
 
   function mediaLoadError(audio) {
     var error = new Error(audio && audio.error && audio.error.message || 'audio_load_failed');
@@ -343,15 +174,11 @@
     });
   }
   function getSeAudioContext() {
-    if (seAudioContext) { traceContext(); return seAudioContext; }
+    if (seAudioContext) return seAudioContext;
     if (seContextFailed || !canUseWebAudio()) return seAudioContext;
     var Constructor = webAudioConstructor();
     try {
       seAudioContext = new Constructor();
-      traceState.contextConstructor = global.webkitAudioContext && Constructor === global.webkitAudioContext ? 'webkitAudioContext' : 'AudioContext';
-      traceState.contextCount += 1;
-      traceContext();
-      trace('AudioContext created (' + traceState.contextConstructor + '), count = ' + traceState.contextCount + ', state = ' + traceState.contextState);
     }
     catch (error) { seContextFailed = true; audioError('audio-context', error, 'context-constructor'); }
     return seAudioContext;
@@ -367,118 +194,54 @@
       if (result && typeof result.then === 'function') result.then(succeed, fail);
     });
   }
-  function seKeyForSource(source) {
-    var keys = Object.keys(assets.se);
-    for (var index = 0; index < keys.length; index += 1) {
-      if (assets.se[keys[index]] === source) return keys[index];
-    }
-    return 'unknown';
-  }
-  function setSeBufferState(entry, nextState, writer, error) {
-    var previousState = entry.state || 'NOT_LOADED';
-    entry.state = nextState;
-    if (isTraceClickSource(entry.source)) {
-      traceState.bufferStatus = nextState;
-      traceState.bufferWriter = writer;
-      traceState.bufferSubsystem = 'webaudio';
-      traceState.bufferRetryCount = entry.retryCount;
-    }
-    var message = 'SE buffer state change:'
-      + ' soundKey=' + seKeyForSource(entry.source)
-      + ' URL=' + entry.source
-      + ' oldState=' + previousState
-      + ' newState=' + nextState
-      + ' writer=' + writer
-      + ' subsystem=webaudio'
-      + ' error.name=' + (error && error.name || '-')
-      + ' error.message=' + (error && error.message || '-')
-      + ' retryCount=' + entry.retryCount;
-    trace(message);
-  }
+  function setSeBufferState(entry, nextState) { entry.state = nextState; }
   function loadSeBuffer(source, options) {
     options = options || {};
     var existing = seBufferEntries.get(source);
     if (existing) {
-      if (isTraceClickSource(source)) {
-        traceState.bufferCacheHits += 1;
-        traceState.bufferStatus = existing.state;
-        trace('se_click buffer cache hit = ' + existing.state + ', bufferId = ' + traceValue(existing.bufferId));
-      }
       if (existing.state !== 'ERROR' || !options.retryError || existing.retryCount >= 1) return existing;
       existing.retryCount += 1;
       existing.buffer = null;
-      existing.bufferId = null;
       existing.cancelled = false;
-      if (isTraceClickSource(source)) {
-        traceState.fetchStarted = false;
-        traceState.fetchSucceeded = false;
-        traceState.decodeStarted = false;
-        traceState.decodeSucceeded = false;
-      }
-      setSeBufferState(existing, 'RETRY', 'loadSeBuffer', existing.lastError);
+      setSeBufferState(existing, 'RETRY');
       return startSeBufferLoad(existing);
     }
-    var entry = { source: source, state: 'NOT_LOADED', buffer: null, bufferId: null, promise: null, controller: null, cancelled: false, errorStage: 'context', lastError: null, retryCount: 0 };
+    var entry = { source: source, state: 'NOT_LOADED', buffer: null, promise: null, controller: null, cancelled: false, errorStage: 'context', retryCount: 0 };
     seBufferEntries.set(source, entry);
-    setSeBufferState(entry, 'LOADING', 'loadSeBuffer');
+    setSeBufferState(entry, 'LOADING');
     return startSeBufferLoad(entry);
   }
   function startSeBufferLoad(entry) {
     var source = entry.source;
-    if (entry.state === 'RETRY') setSeBufferState(entry, 'LOADING', 'startSeBufferLoad');
+    if (entry.state === 'RETRY') setSeBufferState(entry, 'LOADING');
     var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
     entry.controller = controller;
     var context = getSeAudioContext();
     if (!context) {
-      entry.lastError = new Error('audio_context_unavailable');
-      setSeBufferState(entry, 'ERROR', 'startSeBufferLoad', entry.lastError);
+      setSeBufferState(entry, 'ERROR');
       entry.promise = Promise.resolve(null);
       return entry;
     }
     entry.promise = Promise.resolve().then(function () {
       entry.errorStage = 'fetch';
-      if (isTraceClickSource(source)) {
-        traceState.fetchStarted = true;
-        trace('se_click fetch started');
-      }
       var fetchOptions = { credentials: 'same-origin' };
       if (controller) fetchOptions.signal = controller.signal;
       return global.fetch(source, fetchOptions);
     }).then(function (response) {
       if (!response || !response.ok) throw new Error('audio_fetch_failed_' + (response && response.status || 0));
-      if (isTraceClickSource(source)) {
-        traceState.fetchSucceeded = true;
-        trace('se_click fetch succeeded, HTTP ' + response.status);
-      }
       entry.errorStage = 'array-buffer';
       return response.arrayBuffer();
     }).then(function (arrayBuffer) {
       if (entry.cancelled || destroyed) return null;
       entry.errorStage = 'decode';
-      if (isTraceClickSource(source)) {
-        traceState.decodeStarted = true;
-        trace('se_click decode started, bytes = ' + arrayBuffer.byteLength);
-      }
       return decodeAudioBuffer(context, arrayBuffer);
     }).then(function (buffer) {
       if (!buffer || entry.cancelled || destroyed) return null;
       entry.buffer = buffer;
-      entry.bufferId = ++traceBufferSequence;
-      entry.lastError = null;
-      setSeBufferState(entry, 'READY', 'loadSeBuffer');
-      if (isTraceClickSource(source)) {
-        traceState.decodeSucceeded = true;
-        traceState.bufferId = entry.bufferId;
-        traceState.bufferDuration = buffer.duration;
-        traceState.bufferSampleRate = buffer.sampleRate;
-        traceState.bufferChannels = buffer.numberOfChannels;
-        traceState.bufferLength = buffer.length;
-        trace('se_click decode succeeded, buffer = READY, bufferId = ' + entry.bufferId);
-      }
+      setSeBufferState(entry, 'READY');
       return buffer;
     }).catch(function (error) {
-      entry.lastError = error;
-      setSeBufferState(entry, 'ERROR', 'loadSeBuffer', error);
+      setSeBufferState(entry, 'ERROR');
       if (!entry.cancelled && !destroyed) audioError(source, error, entry.errorStage);
       return null;
     });
@@ -508,7 +271,6 @@
     if (settings.bgmEnabled && options.resume !== false && currentBgm && currentBgm.paused && !global.document?.hidden && unlocked) attemptPlay(currentBgm, currentBgmId);
     if (!settings.seEnabled) activeSe.forEach(stopSe);
     else updateActiveSeGains();
-    renderTrace();
     if (!options.silent) emit('audio:settings-changed', getSettings());
     return getSettings();
   }
@@ -541,7 +303,7 @@
     return activationId;
   }
 
-  function activationPulse(context, attemptId) {
+  function activationPulse(context) {
     var source;
     var gain;
     var cleaned = false;
@@ -550,7 +312,6 @@
       cleaned = true;
       try { if (source) source.disconnect(); } catch (error) { /* pulse cleanup失敗はunlockを妨げない。 */ }
       try { if (gain) gain.disconnect(); } catch (error) { /* pulse cleanup失敗はunlockを妨げない。 */ }
-      trace('resume attempt #' + attemptId + ' activation pulse ended');
     }
     try {
       source = context.createBufferSource();
@@ -559,20 +320,17 @@
       gain.gain.value = 0;
       source.connect(gain);
       gain.connect(context.destination);
-      trace('resume attempt #' + attemptId + ' activation pulse created, gain=0');
       source.onended = cleanup;
       source.start(0);
-      trace('resume attempt #' + attemptId + ' activation pulse started');
       return cleanup;
     } catch (error) {
       try { if (source) source.disconnect(); } catch (disconnectError) { /* cleanup失敗は無視する。 */ }
       try { if (gain) gain.disconnect(); } catch (disconnectError) { /* cleanup失敗は無視する。 */ }
-      trace('resume attempt #' + attemptId + ' activation pulse failed: ' + (error.name || 'Error') + ' ' + (error.message || String(error)));
       return null;
     }
   }
 
-  function completeUnlockAttempt(attempt, success, reason) {
+  function completeUnlockAttempt(attempt, success) {
     if (!attempt || attempt.completed) return;
     attempt.completed = true;
     if (attempt.pollTimer) global.clearInterval(attempt.pollTimer);
@@ -580,9 +338,6 @@
     if (attempt.pulseCleanup) attempt.pulseCleanup();
     success = !!success && attempt.context.state === 'running';
     unlocked = success;
-    traceContext();
-    trace('resume attempt #' + attempt.id + ' unlock attempt completed: ' + reason + ', state=' + attempt.context.state);
-    trace(success ? 'unlock success: AudioContext running' : 'unlock failure: AudioContext ' + attempt.context.state);
     if (seUnlockAttempt === attempt) {
       seUnlockAttempt = null;
       seUnlockPromise = null;
@@ -599,21 +354,17 @@
     if (!canUseAudio() && !canUseWebAudio()) return Promise.resolve(false);
     var context = getSeAudioContext();
     var activationId = currentActivationId;
-    trace('audio unlock requested, state before resume = ' + (context ? context.state : 'unavailable') + ', activationId=' + activationId);
     if (!context) {
       unlocked = false;
-      trace('unlock failure: AudioContext unavailable');
       return Promise.resolve(false);
     }
     if (context.state === 'running') {
       if (seUnlockAttempt) {
         var pendingPromise = seUnlockPromise;
-        completeUnlockAttempt(seUnlockAttempt, true, 'state running before Promise settlement');
+        completeUnlockAttempt(seUnlockAttempt, true);
         return pendingPromise;
       }
       unlocked = true;
-      traceContext();
-      trace('unlock success: AudioContext already running');
       primeClickSeBuffer();
       resumePendingBgm();
       return Promise.resolve(true);
@@ -623,58 +374,47 @@
       var elapsed = Date.now() - seUnlockAttempt.startedAt;
       var staleActivation = activationId && seUnlockAttempt.activationId && activationId !== seUnlockAttempt.activationId;
       if (staleActivation || elapsed >= RESUME_STALL_MS) {
-        trace('resume attempt #' + seUnlockAttempt.id + ' stale unlockPromise cleared, elapsed=' + elapsed + 'ms state=' + context.state);
-        completeUnlockAttempt(seUnlockAttempt, false, 'stale Promise cleared');
+        completeUnlockAttempt(seUnlockAttempt, false);
       } else {
-        trace('unlockPromise reused: resume attempt #' + seUnlockAttempt.id + ', elapsed=' + elapsed + 'ms');
         return seUnlockPromise;
       }
     }
     if (typeof context.resume !== 'function') {
-      trace('unlock failure: AudioContext.resume unavailable, state after resume = ' + context.state);
       return Promise.resolve(false);
     }
-    var attempt = { id: ++resumeAttemptSequence, activationId: activationId, context: context, startedAt: Date.now(), completed: false, pollTimer: null, stallTimer: null, pulseCleanup: null, resolve: null, promise: null };
+    var attempt = { activationId: activationId, context: context, startedAt: Date.now(), completed: false, pollTimer: null, stallTimer: null, pulseCleanup: null, resolve: null, promise: null };
     attempt.promise = new Promise(function (resolve) { attempt.resolve = resolve; });
     seUnlockAttempt = attempt;
     seUnlockPromise = attempt.promise;
-    trace('resume attempt #' + attempt.id + ' started, state=' + context.state + ', activationId=' + activationId);
     var resumeResult;
     try {
-      trace('resume attempt #' + attempt.id + ' resume requested, state before resume = ' + context.state);
       resumeResult = context.resume();
-      attempt.pulseCleanup = activationPulse(context, attempt.id);
+      attempt.pulseCleanup = activationPulse(context);
     } catch (error) {
-      trace('resume attempt #' + attempt.id + ' resume threw, state=' + context.state);
       audioError('audio-context', error, 'context-resume');
-      completeUnlockAttempt(attempt, false, 'resume threw');
+      completeUnlockAttempt(attempt, false);
       return attempt.promise;
     }
-    if (context.state === 'running') completeUnlockAttempt(attempt, true, 'state running after activation');
+    if (context.state === 'running') completeUnlockAttempt(attempt, true);
     if (!attempt.completed) {
       attempt.pollTimer = global.setInterval(function () {
-        if (context.state === 'running') completeUnlockAttempt(attempt, true, 'state running while resume pending');
+        if (context.state === 'running') completeUnlockAttempt(attempt, true);
       }, RESUME_STATE_POLL_MS);
       attempt.stallTimer = global.setTimeout(function () {
-        var stallElapsed = Date.now() - attempt.startedAt;
         if (context.state === 'running') {
-          completeUnlockAttempt(attempt, true, 'state running at stall boundary');
+          completeUnlockAttempt(attempt, true);
           return;
         }
-        trace('resume attempt #' + attempt.id + ' resume stalled after ' + stallElapsed + 'ms, state=' + context.state);
-        trace('resume attempt #' + attempt.id + ' stale unlockPromise cleared');
-        completeUnlockAttempt(attempt, false, 'resume stalled');
+        completeUnlockAttempt(attempt, false);
       }, RESUME_STALL_MS);
     }
     Promise.resolve(resumeResult).then(function () {
       if (attempt.completed) return;
-      trace('resume attempt #' + attempt.id + ' resume resolved, state after resume = ' + context.state);
-      completeUnlockAttempt(attempt, context.state === 'running', 'resume Promise resolved');
+      completeUnlockAttempt(attempt, context.state === 'running');
     }, function (error) {
       if (attempt.completed) return;
-      trace('resume attempt #' + attempt.id + ' resume rejected, state=' + context.state);
       audioError('audio-context', error, 'context-resume');
-      completeUnlockAttempt(attempt, false, 'resume Promise rejected');
+      completeUnlockAttempt(attempt, false);
     });
     return attempt.promise;
   }
@@ -733,11 +473,6 @@
   }
   function playDecodedSe(entry, id, options) {
     var volumeScale = options.volume === undefined ? 1 : clamp(options.volume, 1);
-    var traced = isTraceClickSource(entry.source);
-    if (traced) {
-      traceState.bufferStatus = entry.state;
-      trace('se_click buffer = ' + entry.state + ', bufferId = ' + traceValue(entry.bufferId));
-    }
     if (entry.state !== 'READY' || !entry.buffer || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
     var context = getSeAudioContext();
     if (!context || context.state !== 'running' || !unlocked || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
@@ -747,41 +482,16 @@
       var gain;
       var playback;
       try {
-        if (traced) {
-          traceState.sourceId = ++traceSourceSequence;
-          traceState.sourceCreated = false;
-          traceState.gainCreated = false;
-          traceState.sourceConnected = false;
-          traceState.destinationConnected = false;
-          traceState.computedGain = seGainValue(volumeScale);
-          traceState.startAt = null;
-          traceState.endedAt = null;
-          trace('pre-play seEnabled=' + settings.seEnabled + ' seVolume=' + settings.seVolume + ' masterVolume=' + masterVolume + ' computedGain=' + traceState.computedGain);
-        }
         source = context.createBufferSource();
-        if (traced) { traceState.sourceCreated = true; trace('source #' + traceState.sourceId + ' created'); }
         gain = context.createGain();
-        if (traced) { traceState.gainCreated = true; trace('GainNode created'); }
         source.buffer = entry.buffer;
         gain.gain.value = seGainValue(volumeScale);
         source.connect(gain);
-        if (traced) { traceState.sourceConnected = true; trace('source -> gain: connected'); }
         gain.connect(context.destination);
-        if (traced) { traceState.destinationConnected = true; trace('gain -> destination: connected'); }
-        playback = { source: source, gain: gain, volumeScale: volumeScale, traceSourceId: traced ? traceState.sourceId : null };
+        playback = { source: source, gain: gain, volumeScale: volumeScale };
         activeSe.add(playback);
-        source.onended = function () {
-          if (playback.traceSourceId) {
-            traceState.endedAt = traceTimestamp();
-            trace('source #' + playback.traceSourceId + ' ended');
-          }
-          releaseSe(playback);
-        };
+        source.onended = function () { releaseSe(playback); };
         source.start(0);
-        if (traced) {
-          traceState.startAt = traceTimestamp();
-          trace('source #' + traceState.sourceId + '.start(0)');
-        }
         emit('audio:played', { id: id });
         return true;
       } catch (error) {
@@ -800,21 +510,11 @@
   function playSe(id, options) {
     options = options || {};
     var source = assets.se[id];
-    if (id === 'button-tap' || source && isTraceClickSource(source)) {
-      traceState.playCalls += 1;
-      traceState.lastPlayAt = traceTimestamp();
-      traceState.resolvedKey = id;
-      traceState.resolvedUrl = source || 'NOT_RESOLVED';
-      traceState.computedGain = channelEnabled('se') ? channelVolume('se') * (options.volume === undefined ? 1 : clamp(options.volume, 1)) : 0;
-      trace("playSe('" + id + "') requested (#" + traceState.playCalls + '), URL = ' + traceState.resolvedUrl);
-    }
     if (!source || !canUseWebAudio() || !channelEnabled('se') || channelVolume('se') <= 0 || destroyed) return Promise.resolve(false);
     var context = getSeAudioContext();
-    trace("playSe('" + id + "') start: context.state = " + (context ? context.state : 'unavailable') + ', unlocked = ' + unlocked);
     if (!context || context.state !== 'running' || !unlocked) {
       if (unlocked) {
         unlocked = false;
-        trace('playSe actual context.state takes priority; treated as locked');
       }
       return unlock().then(function (ready) {
         return ready ? playReadySe(id, options, source) : false;
@@ -835,7 +535,6 @@
     return entry.promise.then(function (buffer) {
       if (buffer) return playDecodedSe(entry, id, options);
       if (entry.state !== 'ERROR' || entry.retryCount >= 1) return false;
-      trace("playSe('" + id + "') initial load failed; explicit request starts one retry");
       var retryEntry = loadSeBuffer(source, { retryError: true });
       if (retryEntry.state === 'READY') return playDecodedSe(retryEntry, id, options);
       if (retryEntry.state === 'ERROR') return false;
@@ -862,7 +561,6 @@
     if (currentBgm) currentBgm.volume = settings.bgmEnabled ? channelVolume('bgm') : 0;
     if (masterVolume <= 0) activeSe.forEach(stopSe);
     else updateActiveSeGains();
-    renderTrace();
     return masterVolume;
   }
   function getState() {
@@ -928,7 +626,7 @@
       beginUserActivation();
       if (!event.target.closest) return;
       var control = event.target.closest('button,[data-action]');
-      if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim],#audio-runtime-trace')) return;
+      if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim]')) return;
       playSe('button-tap');
     };
     global.document.addEventListener('pointerdown', gestureHandler, true);
@@ -948,7 +646,7 @@
       }
     });
     seBufferEntries.clear();
-    if (seUnlockAttempt) completeUnlockAttempt(seUnlockAttempt, false, 'AudioManager destroyed');
+    if (seUnlockAttempt) completeUnlockAttempt(seUnlockAttempt, false);
     seUnlockAttempt = null;
     seUnlockPromise = null;
     currentActivationId = 0;
@@ -963,13 +661,7 @@
     }
     if (global.document && buttonHandler) global.document.removeEventListener('click', buttonHandler, true);
     if (global.document && visibilityHandler) global.document.removeEventListener('visibilitychange', visibilityHandler);
-    if (global.document && tracePointerHandler) global.document.removeEventListener('pointerdown', tracePointerHandler, true);
-    if (traceDirectButton && traceDirectHandler) traceDirectButton.removeEventListener('click', traceDirectHandler);
-    if (tracePanel) tracePanel.remove();
-    if (traceStyle) traceStyle.remove();
-    gestureHandler = null; buttonHandler = null; visibilityHandler = null; tracePointerHandler = null;
-    tracePanel = null; traceOutput = null; traceDirectButton = null; traceDirectHandler = null; traceStyle = null;
-    traceLines = [];
+    gestureHandler = null; buttonHandler = null; visibilityHandler = null;
     lastPlayedAt.clear();
   }
 
@@ -1003,7 +695,6 @@
   EbiAR.AudioManager = api;
   EbiAR.sound = api;
   connectEvents();
-  installTracePanel();
   installGestureUnlock();
   installLifecycle();
 })(window);

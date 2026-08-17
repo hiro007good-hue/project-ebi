@@ -28,7 +28,7 @@
   <script src="js/story.js"></script>
   <script src="js/ending.js"></script>
   <script src="js/save.js?rev=audio-system"></script>
-  <script src="js/sound.js?rev=audio-8-resume-stall-recovery"></script>
+  <script src="js/sound.js?rev=audio-9-production"></script>
   <script src="js/effect.js"></script>
   <script src="js/ui.js?rev=audio-system"></script>
   <script src="js/ar.js?rev=audio-1"></script>
@@ -47,7 +47,6 @@
       EbiAR.Ending.initialize(saved && saved.ending);
       EbiAR.events.on('ui:start-requested', function () {
         EbiAR.sound.unlock();
-        EbiAR.sound.playBgm('adventure-theme', { fadeMs: 300 });
         EbiAR.gps.start();
         EbiAR.events.emit('game:started', { started: true, startedAt: new Date().toISOString() });
       });
