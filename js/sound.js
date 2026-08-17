@@ -58,6 +58,26 @@
   var gestureHandler = null;
   var buttonHandler = null;
   var visibilityHandler = null;
+  var tracePointerHandler = null;
+  var tracePanel = null;
+  var traceOutput = null;
+  var traceDirectButton = null;
+  var traceDirectHandler = null;
+  var traceStyle = null;
+  var traceSourceSequence = 0;
+  var traceBufferSequence = 0;
+  var traceLines = [];
+  var traceState = {
+    initialized: false,
+    contextConstructor: 'NOT_CREATED', contextCount: 0, contextState: 'NOT_CREATED', contextSampleRate: null,
+    baseLatency: null, destinationChannels: null,
+    bufferStatus: 'NOT_LOADED', fetchStarted: false, fetchSucceeded: false, decodeStarted: false, decodeSucceeded: false,
+    bufferId: null, bufferDuration: null, bufferSampleRate: null, bufferChannels: null, bufferLength: null, bufferCacheHits: 0,
+    playCalls: 0, lastPlayAt: '-', resolvedKey: '-', resolvedUrl: '-',
+    sourceId: null, sourceCreated: false, gainCreated: false, sourceConnected: false, destinationConnected: false,
+    computedGain: null, startAt: null, endedAt: null,
+    errorStage: '-', errorName: '-', errorMessage: '-', directResult: 'NOT_RUN'
+  };
   var lastPlayedAt = new Map();
   var SPECIAL_DISCOVERY_SE = Object.freeze({
     'hino-gold': 'discover-hino-gold',
@@ -75,9 +95,115 @@
   function webAudioConstructor() { return global.AudioContext || global.webkitAudioContext; }
   function canUseWebAudio() { return typeof webAudioConstructor() === 'function' && typeof global.fetch === 'function'; }
   function emit(name, detail) { if (EbiAR.events) EbiAR.events.emit(name, detail); }
-  function audioError(id, error) { emit('audio:error', { id: id, error: error }); }
+  function traceTimestamp() {
+    var date = new Date();
+    function pad(value, length) { return String(value).padStart(length, '0'); }
+    return pad(date.getHours(), 2) + ':' + pad(date.getMinutes(), 2) + ':' + pad(date.getSeconds(), 2) + '.' + pad(date.getMilliseconds(), 3);
+  }
+  function traceContext() {
+    if (!seAudioContext) return;
+    traceState.contextState = seAudioContext.state || 'unknown';
+    traceState.contextSampleRate = Number(seAudioContext.sampleRate) || null;
+    traceState.baseLatency = Number.isFinite(Number(seAudioContext.baseLatency)) ? Number(seAudioContext.baseLatency) : null;
+    traceState.destinationChannels = seAudioContext.destination && Number(seAudioContext.destination.channelCount) || null;
+  }
+  function traceValue(value) { return value === null || value === undefined ? '-' : String(value); }
+  function renderTrace() {
+    if (!traceOutput) return;
+    traceContext();
+    var computedGain = channelEnabled('se') ? channelVolume('se') : 0;
+    traceOutput.textContent = [
+      'AudioManager',
+      ' initialized=' + traceState.initialized + ' unlocked=' + unlocked,
+      ' context=' + traceState.contextConstructor + ' count=' + traceState.contextCount + ' state=' + traceState.contextState,
+      ' sampleRate=' + traceValue(traceState.contextSampleRate) + ' baseLatency=' + traceValue(traceState.baseLatency) + ' destination.channelCount=' + traceValue(traceState.destinationChannels),
+      ' seEnabled=' + settings.seEnabled + ' seVolume=' + settings.seVolume + ' masterVolume=' + masterVolume + ' computedGain=' + computedGain,
+      '',
+      'se_click.mp3',
+      ' buffer=' + traceState.bufferStatus + ' bufferId=' + traceValue(traceState.bufferId) + ' cacheHits=' + traceState.bufferCacheHits,
+      ' fetch=' + (traceState.fetchStarted ? (traceState.fetchSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED') + ' decode=' + (traceState.decodeStarted ? (traceState.decodeSucceeded ? 'SUCCESS' : 'STARTED') : 'NOT_STARTED'),
+      ' duration=' + traceValue(traceState.bufferDuration) + ' sampleRate=' + traceValue(traceState.bufferSampleRate) + ' channels=' + traceValue(traceState.bufferChannels) + ' length=' + traceValue(traceState.bufferLength),
+      '',
+      'Playback',
+      ' calls=' + traceState.playCalls + ' last=' + traceState.lastPlayAt,
+      ' key=' + traceState.resolvedKey + ' url=' + traceState.resolvedUrl,
+      ' sourceId=' + traceValue(traceState.sourceId) + ' source=' + traceState.sourceCreated + ' gainNode=' + traceState.gainCreated,
+      ' source->gain=' + (traceState.sourceConnected ? 'connected' : 'not connected') + ' gain->destination=' + (traceState.destinationConnected ? 'connected' : 'not connected'),
+      ' gain=' + traceValue(traceState.computedGain) + ' start=' + traceValue(traceState.startAt) + ' ended=' + traceValue(traceState.endedAt),
+      ' directTest=' + traceState.directResult,
+      '',
+      'Last audio:error',
+      ' stage=' + traceState.errorStage + ' name=' + traceState.errorName,
+      ' message=' + traceState.errorMessage,
+      '',
+      'Timeline',
+      traceLines.length ? traceLines.join('\n') : '(waiting)'
+    ].join('\n');
+  }
+  function trace(message) {
+    traceLines.push('[' + traceTimestamp() + '] ' + message);
+    if (traceLines.length > 80) traceLines.shift();
+    renderTrace();
+  }
+  function traceError(stage, error) {
+    traceState.errorStage = stage || 'unknown';
+    traceState.errorName = error && error.name || 'Error';
+    traceState.errorMessage = error && error.message || String(error || 'unknown error');
+    trace('ERROR ' + traceState.errorStage + ': ' + traceState.errorName + ' ' + traceState.errorMessage);
+  }
+  function audioError(id, error, stage) {
+    traceError(stage || id || 'unknown', error);
+    emit('audio:error', { id: id, error: error, stage: stage || id || 'unknown' });
+  }
   function channelVolume(channel) { return masterVolume * (channel === 'bgm' ? settings.bgmVolume : settings.seVolume); }
   function channelEnabled(channel) { return channel === 'bgm' ? settings.bgmEnabled : settings.seEnabled; }
+  function isTraceClickSource(source) { return source === assets.se['button-tap']; }
+
+  function installTracePanel() {
+    if (!global.document || !global.document.body || tracePanel) return;
+    traceStyle = global.document.createElement('style');
+    traceStyle.id = 'audio-runtime-trace-style';
+    traceStyle.textContent = '#audio-runtime-trace{position:fixed;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:12000;width:min(390px,calc(100vw - 16px));max-height:46vh;overflow:auto;border:1px solid #334155;border-radius:8px;background:#0f172eeF;color:#e2e8f0;box-shadow:0 4px 18px #0007;font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace}#audio-runtime-trace>summary{cursor:pointer;padding:8px 10px;font:700 12px/1.3 system-ui,sans-serif;touch-action:manipulation}#audio-runtime-trace .audio-trace-body{padding:0 10px 10px}#audio-runtime-trace button{width:100%;min-height:40px;margin:4px 0 8px;border:0;border-radius:6px;background:#f59e0b;color:#111827;font:700 13px system-ui,sans-serif;touch-action:manipulation}#audio-runtime-trace pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}';
+    tracePanel = global.document.createElement('details');
+    tracePanel.id = 'audio-runtime-trace';
+    var summary = global.document.createElement('summary');
+    summary.textContent = 'Audio-4 Runtime Trace';
+    var body = global.document.createElement('div');
+    body.className = 'audio-trace-body';
+    traceDirectButton = global.document.createElement('button');
+    traceDirectButton.type = 'button';
+    traceDirectButton.textContent = 'SEを直接鳴らす';
+    traceOutput = global.document.createElement('pre');
+    body.append(traceDirectButton, traceOutput);
+    tracePanel.append(summary, body);
+    global.document.head.appendChild(traceStyle);
+    global.document.body.appendChild(tracePanel);
+    tracePointerHandler = function (event) {
+      var target = event.target && event.target.closest && event.target.closest('[data-action="start"]');
+      if (!target) return;
+      traceLines = [];
+      tracePanel.open = true;
+      trace('pointerdown: adventure start');
+    };
+    traceDirectHandler = function () {
+      traceState.directResult = 'REQUESTED';
+      trace('direct SE test requested');
+      unlock().then(function (ready) {
+        if (!ready) return false;
+        return playSe('button-tap');
+      }).then(function (played) {
+        traceState.directResult = played ? 'PLAYED' : 'NOT_PLAYED';
+        trace('direct SE test result = ' + traceState.directResult);
+      }, function (error) {
+        traceState.directResult = 'ERROR';
+        audioError('button-tap', error, 'direct-test');
+      });
+    };
+    traceDirectButton.addEventListener('click', traceDirectHandler);
+    global.document.addEventListener('pointerdown', tracePointerHandler, true);
+    traceState.initialized = true;
+    trace('AudioManager initialized');
+  }
 
   function mediaLoadError(audio) {
     var error = new Error(audio && audio.error && audio.error.message || 'audio_load_failed');
@@ -167,29 +293,43 @@
     });
   }
   function getSeAudioContext() {
-    if (seAudioContext || seContextFailed || !canUseWebAudio()) return seAudioContext;
-    try { seAudioContext = new (webAudioConstructor())(); }
-    catch (error) { seContextFailed = true; audioError('audio-context', error); }
+    if (seAudioContext) { traceContext(); return seAudioContext; }
+    if (seContextFailed || !canUseWebAudio()) return seAudioContext;
+    var Constructor = webAudioConstructor();
+    try {
+      seAudioContext = new Constructor();
+      traceState.contextConstructor = global.webkitAudioContext && Constructor === global.webkitAudioContext ? 'webkitAudioContext' : 'AudioContext';
+      traceState.contextCount += 1;
+      traceContext();
+      trace('AudioContext created (' + traceState.contextConstructor + '), count = ' + traceState.contextCount + ', state = ' + traceState.contextState);
+    }
+    catch (error) { seContextFailed = true; audioError('audio-context', error, 'context-constructor'); }
     return seAudioContext;
   }
   function resumeSeAudioContext() {
     var context = getSeAudioContext();
     if (!context) return Promise.resolve(null);
-    if (context.state === 'running' || typeof context.resume !== 'function') return Promise.resolve(context);
+    if (context.state === 'running' || typeof context.resume !== 'function') {
+      traceContext();
+      trace('AudioContext.state = ' + traceState.contextState);
+      return Promise.resolve(context);
+    }
     if (seResumePromise) return seResumePromise;
     try {
       seResumePromise = Promise.resolve(context.resume()).then(function () {
         seResumePromise = null;
+        traceContext();
+        trace('AudioContext.state = ' + traceState.contextState);
         if (context.state === 'running') return context;
-        audioError('audio-context', new Error('audio_context_not_running_' + context.state));
+        audioError('audio-context', new Error('audio_context_not_running_' + context.state), 'context-resume');
         return null;
       }, function (error) {
         seResumePromise = null;
-        audioError('audio-context', error);
+        audioError('audio-context', error, 'context-resume');
         return null;
       });
     } catch (error) {
-      audioError('audio-context', error);
+      audioError('audio-context', error, 'context-resume');
       return Promise.resolve(null);
     }
     return seResumePromise;
@@ -207,34 +347,73 @@
   }
   function loadSeBuffer(source) {
     var existing = seBufferEntries.get(source);
-    if (existing) return existing;
+    if (existing) {
+      if (isTraceClickSource(source)) {
+        traceState.bufferCacheHits += 1;
+        traceState.bufferStatus = existing.state;
+        trace('se_click buffer cache hit = ' + existing.state + ', bufferId = ' + traceValue(existing.bufferId));
+      }
+      return existing;
+    }
     var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
-    var entry = { source: source, state: 'LOADING', buffer: null, promise: null, controller: controller, cancelled: false };
+    var entry = { source: source, state: 'LOADING', buffer: null, bufferId: null, promise: null, controller: controller, cancelled: false, errorStage: 'context' };
     seBufferEntries.set(source, entry);
+    if (isTraceClickSource(source)) {
+      traceState.bufferStatus = 'LOADING';
+      trace('se_click buffer = LOADING');
+    }
     var context = getSeAudioContext();
     if (!context) {
       entry.state = 'ERROR';
+      if (isTraceClickSource(source)) traceState.bufferStatus = 'ERROR';
       entry.promise = Promise.resolve(null);
       return entry;
     }
     entry.promise = Promise.resolve().then(function () {
+      entry.errorStage = 'fetch';
+      if (isTraceClickSource(source)) {
+        traceState.fetchStarted = true;
+        trace('se_click fetch started');
+      }
       var fetchOptions = { credentials: 'same-origin' };
       if (controller) fetchOptions.signal = controller.signal;
       return global.fetch(source, fetchOptions);
     }).then(function (response) {
       if (!response || !response.ok) throw new Error('audio_fetch_failed_' + (response && response.status || 0));
+      if (isTraceClickSource(source)) {
+        traceState.fetchSucceeded = true;
+        trace('se_click fetch succeeded, HTTP ' + response.status);
+      }
+      entry.errorStage = 'array-buffer';
       return response.arrayBuffer();
     }).then(function (arrayBuffer) {
       if (entry.cancelled || destroyed) return null;
+      entry.errorStage = 'decode';
+      if (isTraceClickSource(source)) {
+        traceState.decodeStarted = true;
+        trace('se_click decode started, bytes = ' + arrayBuffer.byteLength);
+      }
       return decodeAudioBuffer(context, arrayBuffer);
     }).then(function (buffer) {
       if (!buffer || entry.cancelled || destroyed) return null;
       entry.buffer = buffer;
+      entry.bufferId = ++traceBufferSequence;
       entry.state = 'READY';
+      if (isTraceClickSource(source)) {
+        traceState.bufferStatus = 'READY';
+        traceState.decodeSucceeded = true;
+        traceState.bufferId = entry.bufferId;
+        traceState.bufferDuration = buffer.duration;
+        traceState.bufferSampleRate = buffer.sampleRate;
+        traceState.bufferChannels = buffer.numberOfChannels;
+        traceState.bufferLength = buffer.length;
+        trace('se_click decode succeeded, buffer = READY, bufferId = ' + entry.bufferId);
+      }
       return buffer;
     }).catch(function (error) {
       entry.state = 'ERROR';
-      if (!entry.cancelled && !destroyed) audioError(source, error);
+      if (isTraceClickSource(source)) traceState.bufferStatus = 'ERROR';
+      if (!entry.cancelled && !destroyed) audioError(source, error, entry.errorStage);
       return null;
     });
     return entry;
@@ -263,6 +442,7 @@
     if (settings.bgmEnabled && options.resume !== false && currentBgm && currentBgm.paused && !global.document?.hidden && unlocked) attemptPlay(currentBgm, currentBgmId);
     if (!settings.seEnabled) activeSe.forEach(stopSe);
     else updateActiveSeGains();
+    renderTrace();
     if (!options.silent) emit('audio:settings-changed', getSettings());
     return getSettings();
   }
@@ -289,6 +469,7 @@
   /** iPhone Safari/PWAのユーザー操作内で再生制限を解除する。 */
   function unlock() {
     if (!canUseAudio() && !canUseWebAudio()) return Promise.resolve(false);
+    trace('audio unlock requested');
     unlocked = true;
     return resumeSeAudioContext().then(function (context) {
       var seReady = !canUseWebAudio() || !!context;
@@ -341,6 +522,11 @@
   }
   function playDecodedSe(entry, id, options) {
     var volumeScale = options.volume === undefined ? 1 : clamp(options.volume, 1);
+    var traced = isTraceClickSource(entry.source);
+    if (traced) {
+      traceState.bufferStatus = entry.state;
+      trace('se_click buffer = ' + entry.state + ', bufferId = ' + traceValue(entry.bufferId));
+    }
     if (entry.state !== 'READY' || !entry.buffer || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
     return resumeSeAudioContext().then(function (context) {
       if (!context || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return false;
@@ -348,16 +534,41 @@
       var gain;
       var playback;
       try {
+        if (traced) {
+          traceState.sourceId = ++traceSourceSequence;
+          traceState.sourceCreated = false;
+          traceState.gainCreated = false;
+          traceState.sourceConnected = false;
+          traceState.destinationConnected = false;
+          traceState.computedGain = seGainValue(volumeScale);
+          traceState.startAt = null;
+          traceState.endedAt = null;
+          trace('pre-play seEnabled=' + settings.seEnabled + ' seVolume=' + settings.seVolume + ' masterVolume=' + masterVolume + ' computedGain=' + traceState.computedGain);
+        }
         source = context.createBufferSource();
+        if (traced) { traceState.sourceCreated = true; trace('source #' + traceState.sourceId + ' created'); }
         gain = context.createGain();
+        if (traced) { traceState.gainCreated = true; trace('GainNode created'); }
         source.buffer = entry.buffer;
         gain.gain.value = seGainValue(volumeScale);
         source.connect(gain);
+        if (traced) { traceState.sourceConnected = true; trace('source -> gain: connected'); }
         gain.connect(context.destination);
-        playback = { source: source, gain: gain, volumeScale: volumeScale };
+        if (traced) { traceState.destinationConnected = true; trace('gain -> destination: connected'); }
+        playback = { source: source, gain: gain, volumeScale: volumeScale, traceSourceId: traced ? traceState.sourceId : null };
         activeSe.add(playback);
-        source.onended = function () { releaseSe(playback); };
+        source.onended = function () {
+          if (playback.traceSourceId) {
+            traceState.endedAt = traceTimestamp();
+            trace('source #' + playback.traceSourceId + ' ended');
+          }
+          releaseSe(playback);
+        };
         source.start(0);
+        if (traced) {
+          traceState.startAt = traceTimestamp();
+          trace('source #' + traceState.sourceId + '.start(0)');
+        }
         emit('audio:played', { id: id });
         return true;
       } catch (error) {
@@ -366,7 +577,7 @@
           try { if (source) source.disconnect(); } catch (disconnectError) { /* 初期化途中の解放失敗は無視する。 */ }
           try { if (gain) gain.disconnect(); } catch (disconnectError) { /* 初期化途中の解放失敗は無視する。 */ }
         }
-        audioError(id, error);
+        audioError(id, error, 'source-playback');
         return false;
       }
     });
@@ -376,6 +587,14 @@
   function playSe(id, options) {
     options = options || {};
     var source = assets.se[id];
+    if (id === 'button-tap' || source && isTraceClickSource(source)) {
+      traceState.playCalls += 1;
+      traceState.lastPlayAt = traceTimestamp();
+      traceState.resolvedKey = id;
+      traceState.resolvedUrl = source || 'NOT_RESOLVED';
+      traceState.computedGain = channelEnabled('se') ? channelVolume('se') * (options.volume === undefined ? 1 : clamp(options.volume, 1)) : 0;
+      trace("playSe('" + id + "') requested (#" + traceState.playCalls + '), URL = ' + traceState.resolvedUrl);
+    }
     if (!source || !canUseWebAudio() || !unlocked || !channelEnabled('se') || channelVolume('se') <= 0 || destroyed) return Promise.resolve(false);
     var cooldownKey = String(options.cooldownKey || id);
     var cooldownMs = Math.max(0, Number(options.cooldownMs) || 0);
@@ -388,7 +607,7 @@
     return entry.promise.then(function (buffer) {
       return buffer ? playDecodedSe(entry, id, options) : false;
     }, function (error) {
-      audioError(id, error);
+      audioError(id, error, 'buffer-await');
       return false;
     });
   }
@@ -407,6 +626,7 @@
     if (currentBgm) currentBgm.volume = settings.bgmEnabled ? channelVolume('bgm') : 0;
     if (masterVolume <= 0) activeSe.forEach(stopSe);
     else updateActiveSeGains();
+    renderTrace();
     return masterVolume;
   }
   function getState() {
@@ -470,7 +690,7 @@
     buttonHandler = function (event) {
       if (!event.target.closest) return;
       var control = event.target.closest('button,[data-action]');
-      if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim]')) return;
+      if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim],#audio-runtime-trace')) return;
       if (!unlocked) unlock();
       playSe('button-tap');
     };
@@ -503,7 +723,13 @@
     }
     if (global.document && buttonHandler) global.document.removeEventListener('click', buttonHandler, true);
     if (global.document && visibilityHandler) global.document.removeEventListener('visibilitychange', visibilityHandler);
-    gestureHandler = null; buttonHandler = null; visibilityHandler = null;
+    if (global.document && tracePointerHandler) global.document.removeEventListener('pointerdown', tracePointerHandler, true);
+    if (traceDirectButton && traceDirectHandler) traceDirectButton.removeEventListener('click', traceDirectHandler);
+    if (tracePanel) tracePanel.remove();
+    if (traceStyle) traceStyle.remove();
+    gestureHandler = null; buttonHandler = null; visibilityHandler = null; tracePointerHandler = null;
+    tracePanel = null; traceOutput = null; traceDirectButton = null; traceDirectHandler = null; traceStyle = null;
+    traceLines = [];
     lastPlayedAt.clear();
   }
 
@@ -537,6 +763,7 @@
   EbiAR.AudioManager = api;
   EbiAR.sound = api;
   connectEvents();
+  installTracePanel();
   installGestureUnlock();
   installLifecycle();
   loadSeBuffer(assets.se['button-tap']);
