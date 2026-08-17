@@ -49,8 +49,10 @@
   var destroyed = false;
   var fadeTimers = new WeakMap();
   var activeSe = new Set();
-  var seEntries = new Map();
-  var seEntryByAudio = new WeakMap();
+  var seBufferEntries = new Map();
+  var seAudioContext = null;
+  var seResumePromise = null;
+  var seContextFailed = false;
   var currentBgmEntry = null;
   var subscriptions = [];
   var gestureHandler = null;
@@ -70,6 +72,8 @@
     return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
   }
   function canUseAudio() { return typeof global.Audio === 'function'; }
+  function webAudioConstructor() { return global.AudioContext || global.webkitAudioContext; }
+  function canUseWebAudio() { return typeof webAudioConstructor() === 'function' && typeof global.fetch === 'function'; }
   function emit(name, detail) { if (EbiAR.events) EbiAR.events.emit(name, detail); }
   function audioError(id, error) { emit('audio:error', { id: id, error: error }); }
   function channelVolume(channel) { return masterVolume * (channel === 'bgm' ? settings.bgmVolume : settings.seVolume); }
@@ -141,15 +145,99 @@
     if (timer) global.clearInterval(timer);
     fadeTimers.delete(audio);
   }
-  function releaseSe(audio, discard) {
-    if (!audio) return;
-    clearFade(audio);
-    activeSe.delete(audio);
-    if (!discard && seEntryByAudio.has(audio)) {
-      try { audio.currentTime = 0; } catch (error) { /* READY音源は次回要求で再利用する。 */ }
-      return;
+  function releaseSe(playback) {
+    if (!playback) return;
+    activeSe.delete(playback);
+    playback.source.onended = null;
+    try { playback.source.disconnect(); } catch (error) { /* 解放失敗はゲームへ影響させない。 */ }
+    try { playback.gain.disconnect(); } catch (error) { /* 解放失敗はゲームへ影響させない。 */ }
+  }
+  function stopSe(playback) {
+    if (!playback) return;
+    try { playback.source.stop(0); } catch (error) { /* 停止済みSourceは無視する。 */ }
+    releaseSe(playback);
+  }
+  function seGainValue(volumeScale) {
+    return channelEnabled('se') ? channelVolume('se') * clamp(volumeScale, 1) : 0;
+  }
+  function updateActiveSeGains() {
+    activeSe.forEach(function (playback) {
+      try { playback.gain.gain.value = seGainValue(playback.volumeScale); }
+      catch (error) { audioError('se-gain', error); }
+    });
+  }
+  function getSeAudioContext() {
+    if (seAudioContext || seContextFailed || !canUseWebAudio()) return seAudioContext;
+    try { seAudioContext = new (webAudioConstructor())(); }
+    catch (error) { seContextFailed = true; audioError('audio-context', error); }
+    return seAudioContext;
+  }
+  function resumeSeAudioContext() {
+    var context = getSeAudioContext();
+    if (!context) return Promise.resolve(null);
+    if (context.state === 'running' || typeof context.resume !== 'function') return Promise.resolve(context);
+    if (seResumePromise) return seResumePromise;
+    try {
+      seResumePromise = Promise.resolve(context.resume()).then(function () {
+        seResumePromise = null;
+        if (context.state === 'running') return context;
+        audioError('audio-context', new Error('audio_context_not_running_' + context.state));
+        return null;
+      }, function (error) {
+        seResumePromise = null;
+        audioError('audio-context', error);
+        return null;
+      });
+    } catch (error) {
+      audioError('audio-context', error);
+      return Promise.resolve(null);
     }
-    try { audio.removeAttribute('src'); audio.load(); } catch (error) { /* 解放失敗はゲームへ影響させない。 */ }
+    return seResumePromise;
+  }
+  function decodeAudioBuffer(context, arrayBuffer) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      function succeed(buffer) { if (!settled) { settled = true; resolve(buffer); } }
+      function fail(error) { if (!settled) { settled = true; reject(error); } }
+      var result;
+      try { result = context.decodeAudioData(arrayBuffer, succeed, fail); }
+      catch (error) { fail(error); return; }
+      if (result && typeof result.then === 'function') result.then(succeed, fail);
+    });
+  }
+  function loadSeBuffer(source) {
+    var existing = seBufferEntries.get(source);
+    if (existing) return existing;
+    var controller = typeof global.AbortController === 'function' ? new global.AbortController() : null;
+    var entry = { source: source, state: 'LOADING', buffer: null, promise: null, controller: controller, cancelled: false };
+    seBufferEntries.set(source, entry);
+    var context = getSeAudioContext();
+    if (!context) {
+      entry.state = 'ERROR';
+      entry.promise = Promise.resolve(null);
+      return entry;
+    }
+    entry.promise = Promise.resolve().then(function () {
+      var fetchOptions = { credentials: 'same-origin' };
+      if (controller) fetchOptions.signal = controller.signal;
+      return global.fetch(source, fetchOptions);
+    }).then(function (response) {
+      if (!response || !response.ok) throw new Error('audio_fetch_failed_' + (response && response.status || 0));
+      return response.arrayBuffer();
+    }).then(function (arrayBuffer) {
+      if (entry.cancelled || destroyed) return null;
+      return decodeAudioBuffer(context, arrayBuffer);
+    }).then(function (buffer) {
+      if (!buffer || entry.cancelled || destroyed) return null;
+      entry.buffer = buffer;
+      entry.state = 'READY';
+      return buffer;
+    }).catch(function (error) {
+      entry.state = 'ERROR';
+      if (!entry.cancelled && !destroyed) audioError(source, error);
+      return null;
+    });
+    return entry;
   }
 
   /** @returns {{bgmEnabled:boolean,seEnabled:boolean,bgmVolume:number,seVolume:number}} */
@@ -173,7 +261,8 @@
     if (currentBgm) currentBgm.volume = settings.bgmEnabled ? channelVolume('bgm') : 0;
     if (!settings.bgmEnabled && currentBgm && !currentBgm.paused) currentBgm.pause();
     if (settings.bgmEnabled && options.resume !== false && currentBgm && currentBgm.paused && !global.document?.hidden && unlocked) attemptPlay(currentBgm, currentBgmId);
-    if (!settings.seEnabled) activeSe.forEach(function (audio) { try { audio.pause(); } finally { releaseSe(audio); } });
+    if (!settings.seEnabled) activeSe.forEach(stopSe);
+    else updateActiveSeGains();
     if (!options.silent) emit('audio:settings-changed', getSettings());
     return getSettings();
   }
@@ -199,12 +288,15 @@
 
   /** iPhone Safari/PWAのユーザー操作内で再生制限を解除する。 */
   function unlock() {
-    if (!canUseAudio()) return Promise.resolve(false);
+    if (!canUseAudio() && !canUseWebAudio()) return Promise.resolve(false);
     unlocked = true;
-    if (!pendingBgmId || !settings.bgmEnabled) return Promise.resolve(true);
-    var id = pendingBgmId;
-    pendingBgmId = null;
-    return playBgm(id);
+    return resumeSeAudioContext().then(function (context) {
+      var seReady = !canUseWebAudio() || !!context;
+      if (!pendingBgmId || !settings.bgmEnabled) return seReady;
+      var id = pendingBgmId;
+      pendingBgmId = null;
+      return playBgm(id).then(function () { return seReady; });
+    });
   }
 
   /** BGMを遅延生成しループ再生する。ユーザー操作前は予約のみ行う。 */
@@ -247,48 +339,58 @@
     resumeBgmOnVisible = false;
     return true;
   }
-  function playReadySe(entry, id, options) {
-    var audio = entry.audio;
-    if (entry.state !== 'READY' || !channelEnabled('se') || destroyed) return Promise.resolve(false);
-    try { audio.currentTime = 0; } catch (error) { audioError(id, error); return Promise.resolve(false); }
-    audio.volume = clamp(options.volume, channelVolume('se'));
-    activeSe.add(audio);
-    return attemptPlay(audio, id).then(function (played) { if (!played) releaseSe(audio); return played; });
+  function playDecodedSe(entry, id, options) {
+    var volumeScale = options.volume === undefined ? 1 : clamp(options.volume, 1);
+    if (entry.state !== 'READY' || !entry.buffer || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
+    return resumeSeAudioContext().then(function (context) {
+      if (!context || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return false;
+      var source;
+      var gain;
+      var playback;
+      try {
+        source = context.createBufferSource();
+        gain = context.createGain();
+        source.buffer = entry.buffer;
+        gain.gain.value = seGainValue(volumeScale);
+        source.connect(gain);
+        gain.connect(context.destination);
+        playback = { source: source, gain: gain, volumeScale: volumeScale };
+        activeSe.add(playback);
+        source.onended = function () { releaseSe(playback); };
+        source.start(0);
+        emit('audio:played', { id: id });
+        return true;
+      } catch (error) {
+        if (playback) releaseSe(playback);
+        else {
+          try { if (source) source.disconnect(); } catch (disconnectError) { /* 初期化途中の解放失敗は無視する。 */ }
+          try { if (gain) gain.disconnect(); } catch (disconnectError) { /* 初期化途中の解放失敗は無視する。 */ }
+        }
+        audioError(id, error);
+        return false;
+      }
+    });
   }
 
-  /** SEを初回要求時だけloadし、READY後は同じAudio要素を再利用する。 */
+  /** SEはdecode済みAudioBufferを再利用し、再生ごとにSource/Gainを生成する。 */
   function playSe(id, options) {
     options = options || {};
     var source = assets.se[id];
-    if (!source || !canUseAudio() || !unlocked || !channelEnabled('se') || destroyed) return Promise.resolve(false);
+    if (!source || !canUseWebAudio() || !unlocked || !channelEnabled('se') || channelVolume('se') <= 0 || destroyed) return Promise.resolve(false);
     var cooldownKey = String(options.cooldownKey || id);
     var cooldownMs = Math.max(0, Number(options.cooldownMs) || 0);
     var timestamp = Date.now();
     if (cooldownMs && timestamp - (lastPlayedAt.get(cooldownKey) || 0) < cooldownMs) return Promise.resolve(false);
     lastPlayedAt.set(cooldownKey, timestamp);
-    var entry = seEntries.get(source);
-    if (!entry) {
-      entry = createAudioEntry(source, false);
-      if (!entry) return Promise.resolve(false);
-      entry.endedHandler = function () { releaseSe(entry.audio); };
-      entry.audio.addEventListener('ended', entry.endedHandler);
-      seEntries.set(source, entry);
-      seEntryByAudio.set(entry.audio, entry);
-    }
+    var entry = loadSeBuffer(source);
     if (entry.state === 'ERROR') return Promise.resolve(false);
-    if (entry.state === 'READY') return playReadySe(entry, id, options);
-    if (entry.pendingPlay) return entry.pendingPlay;
-    entry.pendingPlay = entry.ready.then(function (ready) {
-      return ready ? playReadySe(entry, id, options) : false;
-    }).then(function (played) {
-      entry.pendingPlay = null;
-      return played;
+    if (entry.state === 'READY') return playDecodedSe(entry, id, options);
+    return entry.promise.then(function (buffer) {
+      return buffer ? playDecodedSe(entry, id, options) : false;
     }, function (error) {
-      entry.pendingPlay = null;
       audioError(id, error);
       return false;
     });
-    return entry.pendingPlay;
   }
 
   function configure(nextAssets) {
@@ -303,6 +405,8 @@
   function setMasterVolume(value) {
     masterVolume = clamp(value, masterVolume);
     if (currentBgm) currentBgm.volume = settings.bgmEnabled ? channelVolume('bgm') : 0;
+    if (masterVolume <= 0) activeSe.forEach(stopSe);
+    else updateActiveSeGains();
     return masterVolume;
   }
   function getState() {
@@ -355,10 +459,13 @@
   function installGestureUnlock() {
     if (!global.document || gestureHandler) return;
     gestureHandler = function () {
-      unlock();
-      global.document.removeEventListener('pointerdown', gestureHandler, true);
-      global.document.removeEventListener('keydown', gestureHandler, true);
-      gestureHandler = null;
+      var handler = gestureHandler;
+      unlock().then(function (ready) {
+        if (!ready || gestureHandler !== handler) return;
+        global.document.removeEventListener('pointerdown', handler, true);
+        global.document.removeEventListener('keydown', handler, true);
+        gestureHandler = null;
+      });
     };
     buttonHandler = function (event) {
       if (!event.target.closest) return;
@@ -375,13 +482,21 @@
     destroyed = true;
     disconnectEvents();
     stopBgm();
-    activeSe.forEach(function (audio) { try { audio.pause(); } finally { releaseSe(audio); } });
-    seEntries.forEach(function (entry) {
-      if (entry.cancel) entry.cancel();
-      if (entry.endedHandler) entry.audio.removeEventListener('ended', entry.endedHandler);
-      try { entry.audio.pause(); } finally { releaseSe(entry.audio, true); }
+    activeSe.forEach(stopSe);
+    seBufferEntries.forEach(function (entry) {
+      entry.cancelled = true;
+      entry.buffer = null;
+      if (entry.controller) {
+        try { entry.controller.abort(); } catch (error) { /* abort失敗はcleanupを妨げない。 */ }
+      }
     });
-    seEntries.clear();
+    seBufferEntries.clear();
+    seResumePromise = null;
+    if (seAudioContext && typeof seAudioContext.close === 'function') {
+      try { Promise.resolve(seAudioContext.close()).catch(function (error) { audioError('audio-context', error); }); }
+      catch (error) { audioError('audio-context', error); }
+    }
+    seAudioContext = null;
     if (global.document && gestureHandler) {
       global.document.removeEventListener('pointerdown', gestureHandler, true);
       global.document.removeEventListener('keydown', gestureHandler, true);
@@ -424,4 +539,5 @@
   connectEvents();
   installGestureUnlock();
   installLifecycle();
+  loadSeBuffer(assets.se['button-tap']);
 })(window);
