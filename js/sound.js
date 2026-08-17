@@ -51,7 +51,7 @@
   var activeSe = new Set();
   var seBufferEntries = new Map();
   var seAudioContext = null;
-  var seResumePromise = null;
+  var seUnlockPromise = null;
   var seContextFailed = false;
   var currentBgmEntry = null;
   var subscriptions = [];
@@ -306,34 +306,6 @@
     catch (error) { seContextFailed = true; audioError('audio-context', error, 'context-constructor'); }
     return seAudioContext;
   }
-  function resumeSeAudioContext() {
-    var context = getSeAudioContext();
-    if (!context) return Promise.resolve(null);
-    if (context.state === 'running' || typeof context.resume !== 'function') {
-      traceContext();
-      trace('AudioContext.state = ' + traceState.contextState);
-      return Promise.resolve(context);
-    }
-    if (seResumePromise) return seResumePromise;
-    try {
-      seResumePromise = Promise.resolve(context.resume()).then(function () {
-        seResumePromise = null;
-        traceContext();
-        trace('AudioContext.state = ' + traceState.contextState);
-        if (context.state === 'running') return context;
-        audioError('audio-context', new Error('audio_context_not_running_' + context.state), 'context-resume');
-        return null;
-      }, function (error) {
-        seResumePromise = null;
-        audioError('audio-context', error, 'context-resume');
-        return null;
-      });
-    } catch (error) {
-      audioError('audio-context', error, 'context-resume');
-      return Promise.resolve(null);
-    }
-    return seResumePromise;
-  }
   function decodeAudioBuffer(context, arrayBuffer) {
     return new Promise(function (resolve, reject) {
       var settled = false;
@@ -469,15 +441,64 @@
   /** iPhone Safari/PWAのユーザー操作内で再生制限を解除する。 */
   function unlock() {
     if (!canUseAudio() && !canUseWebAudio()) return Promise.resolve(false);
-    trace('audio unlock requested');
-    unlocked = true;
-    return resumeSeAudioContext().then(function (context) {
-      var seReady = !canUseWebAudio() || !!context;
-      if (!pendingBgmId || !settings.bgmEnabled) return seReady;
-      var id = pendingBgmId;
-      pendingBgmId = null;
-      return playBgm(id).then(function () { return seReady; });
+    var context = getSeAudioContext();
+    trace('audio unlock requested, state before resume = ' + (context ? context.state : 'unavailable'));
+    if (!context) {
+      unlocked = false;
+      trace('unlock failure: AudioContext unavailable');
+      return Promise.resolve(false);
+    }
+    if (context.state === 'running') {
+      unlocked = true;
+      traceContext();
+      trace('unlock success: AudioContext already running');
+      resumePendingBgm();
+      return Promise.resolve(true);
+    }
+    unlocked = false;
+    if (seUnlockPromise) {
+      trace('unlockPromise reused');
+      return seUnlockPromise;
+    }
+    if (typeof context.resume !== 'function') {
+      trace('unlock failure: AudioContext.resume unavailable, state after resume = ' + context.state);
+      return Promise.resolve(false);
+    }
+    trace('resume requested, state before resume = ' + context.state);
+    var resumeResult;
+    try { resumeResult = context.resume(); }
+    catch (error) {
+      trace('unlock failure: resume threw, state after resume = ' + context.state);
+      audioError('audio-context', error, 'context-resume');
+      return Promise.resolve(false);
+    }
+    var activePromise = Promise.resolve(resumeResult).then(function () {
+      trace('resume Promise resolved');
+      traceContext();
+      trace('state after resume = ' + context.state);
+      unlocked = context.state === 'running';
+      trace(unlocked ? 'unlock success: AudioContext running' : 'unlock failure: AudioContext ' + context.state);
+      if (unlocked) resumePendingBgm();
+      return unlocked;
+    }, function (error) {
+      unlocked = false;
+      traceContext();
+      trace('unlock failure: resume rejected, state after resume = ' + context.state);
+      audioError('audio-context', error, 'context-resume');
+      return false;
     });
+    seUnlockPromise = activePromise;
+    activePromise.then(function () {
+      if (seUnlockPromise === activePromise) seUnlockPromise = null;
+    });
+    return activePromise;
+  }
+
+  function resumePendingBgm() {
+    if (!pendingBgmId || !settings.bgmEnabled) return;
+    var id = pendingBgmId;
+    pendingBgmId = null;
+    playBgm(id).catch(function (error) { audioError(id, error, 'bgm-resume'); });
   }
 
   /** BGMを遅延生成しループ再生する。ユーザー操作前は予約のみ行う。 */
@@ -528,8 +549,10 @@
       trace('se_click buffer = ' + entry.state + ', bufferId = ' + traceValue(entry.bufferId));
     }
     if (entry.state !== 'READY' || !entry.buffer || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
-    return resumeSeAudioContext().then(function (context) {
-      if (!context || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return false;
+    var context = getSeAudioContext();
+    if (!context || context.state !== 'running' || !unlocked || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return Promise.resolve(false);
+    return Promise.resolve().then(function () {
+      if (context.state !== 'running' || !unlocked || !channelEnabled('se') || seGainValue(volumeScale) <= 0 || destroyed) return false;
       var source;
       var gain;
       var playback;
@@ -595,7 +618,22 @@
       traceState.computedGain = channelEnabled('se') ? channelVolume('se') * (options.volume === undefined ? 1 : clamp(options.volume, 1)) : 0;
       trace("playSe('" + id + "') requested (#" + traceState.playCalls + '), URL = ' + traceState.resolvedUrl);
     }
-    if (!source || !canUseWebAudio() || !unlocked || !channelEnabled('se') || channelVolume('se') <= 0 || destroyed) return Promise.resolve(false);
+    if (!source || !canUseWebAudio() || !channelEnabled('se') || channelVolume('se') <= 0 || destroyed) return Promise.resolve(false);
+    var context = getSeAudioContext();
+    trace("playSe('" + id + "') start: context.state = " + (context ? context.state : 'unavailable') + ', unlocked = ' + unlocked);
+    if (!context || context.state !== 'running' || !unlocked) {
+      if (unlocked) {
+        unlocked = false;
+        trace('playSe actual context.state takes priority; treated as locked');
+      }
+      return unlock().then(function (ready) {
+        return ready ? playReadySe(id, options, source) : false;
+      });
+    }
+    return playReadySe(id, options, source);
+  }
+
+  function playReadySe(id, options, source) {
     var cooldownKey = String(options.cooldownKey || id);
     var cooldownMs = Math.max(0, Number(options.cooldownMs) || 0);
     var timestamp = Date.now();
@@ -691,7 +729,6 @@
       if (!event.target.closest) return;
       var control = event.target.closest('button,[data-action]');
       if (!control || control.closest('#ar-capture,#ar-photo,#ar-search,[data-achievement-claim],#audio-runtime-trace')) return;
-      if (!unlocked) unlock();
       playSe('button-tap');
     };
     global.document.addEventListener('pointerdown', gestureHandler, true);
@@ -711,7 +748,7 @@
       }
     });
     seBufferEntries.clear();
-    seResumePromise = null;
+    seUnlockPromise = null;
     if (seAudioContext && typeof seAudioContext.close === 'function') {
       try { Promise.resolve(seAudioContext.close()).catch(function (error) { audioError('audio-context', error); }); }
       catch (error) { audioError('audio-context', error); }
