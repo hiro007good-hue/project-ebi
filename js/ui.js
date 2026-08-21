@@ -11,6 +11,11 @@
   var lastFocusedElement = null;
   var unsubscribe = [];
   var failedCharacterImages = new Set();
+  var COUPON_DEFINITIONS = Object.freeze({
+    'collection-5': Object.freeze({ name: '図鑑コレクタークーポン', source: 'クエスト「図鑑を5種類集めよう」' }),
+    'achievement-collection-5': Object.freeze({ name: '図鑑5種類 達成クーポン', source: '実績「図鑑5種類」' }),
+    'achievement-1000-points': Object.freeze({ name: '1000ポイント達成クーポン', source: '実績「1000ポイント達成」' })
+  });
   var settings = { bgmEnabled: true, seEnabled: true, bgmVolume: 0.6, seVolume: 0.8, vibration: true, highContrast: false };
   var timers = {};
 
@@ -34,6 +39,7 @@
       '.ebi-ui .catalog-summary{display:grid;gap:7px;margin:4px 0 14px}.ebi-ui .catalog-summary p{display:flex;justify-content:space-between;gap:12px;margin:0;font-weight:800}.ebi-ui .catalog-summary progress{width:100%;height:12px;accent-color:var(--ebi)}',
       '.ebi-ui .catalog{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ebi-ui .character-card{display:grid;min-width:0;min-height:44px;padding:10px;text-align:left;background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important;overflow:hidden}.ebi-ui .character-card.locked{color:#625c56!important}.ebi-ui .character-card strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ebi-ui .catalog-image{position:relative;display:grid;place-items:center;width:100%;aspect-ratio:1;margin-bottom:8px;overflow:hidden;border-radius:10px;background:linear-gradient(145deg,#fff5e4,#f2dfc8)}.ebi-ui .catalog-image img{width:100%;height:100%;object-fit:contain}.ebi-ui .catalog-image.is-locked img{filter:brightness(0) saturate(100%);opacity:.72}.ebi-ui .catalog-image-fallback{font-size:clamp(3rem,18vw,6rem);line-height:1}.ebi-ui .catalog-image.is-locked .catalog-image-fallback{filter:brightness(0);opacity:.72}.ebi-ui .catalog-number,.ebi-ui .catalog-status{font-size:.72rem;color:#70645a}.ebi-ui .rarity{font-size:.74rem;color:var(--ebi)}',
       '.ebi-ui .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}.ebi-ui .toolbar input{grid-column:1/-1}.ebi-ui .toolbar input,.ebi-ui .toolbar select{width:100%;min-height:44px;padding:.65rem;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}.ebi-ui .back{align-self:flex-start;min-height:44px;background:transparent!important;color:var(--ink)!important;padding:4px 8px!important}.ebi-ui .catalog-empty{padding:24px;text-align:center;color:#70645a}',
+      '.ebi-ui .collection-progress{min-width:0;margin:0 0 22px;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.ebi-ui .collection-progress h3{margin:0 0 10px;font-size:1rem}.ebi-ui .collection-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.ebi-ui .collection-progress-head p{margin:0;color:#62564c}.ebi-ui .collection-total{font-size:.78rem}.ebi-ui .collection-progress-head strong{font-size:1.35rem;color:var(--ebi);white-space:nowrap}.ebi-ui .collection-progress progress{display:block;width:100%;height:14px;margin:10px 0;accent-color:var(--ebi)}.ebi-ui .collection-next{margin:0 0 14px;font-weight:700}.ebi-ui .collection-rewards{display:grid;gap:8px}.ebi-ui .collection-reward{min-width:0;padding:10px 12px;border-left:4px solid #34734a;background:#fff;overflow-wrap:anywhere}.ebi-ui .collection-reward strong{display:block;font-size:.85rem}.ebi-ui .collection-reward span{display:block;color:#62564c;font-size:.78rem}.ebi-ui .collection-reward-status{margin-top:5px;font-weight:800;color:#34734a!important}.ebi-ui .coupon-summary{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 14px}.ebi-ui .coupon-summary p{margin:0;color:#62564c}.ebi-ui .coupon-summary strong{font-size:1.35rem;color:var(--ebi);white-space:nowrap}.ebi-ui .coupon-list{display:grid;min-width:0;gap:12px}.ebi-ui .coupon-card{position:relative;min-width:0;overflow:hidden;margin:0;padding:16px;border:1px solid #dfc9ae;border-left:6px solid var(--ebi);border-radius:8px;background:#fff;overflow-wrap:anywhere}.ebi-ui .coupon-card h3{margin:0 0 6px;font-size:1rem}.ebi-ui .coupon-card p{margin:5px 0;color:#554a41;font-size:.9rem}.ebi-ui .coupon-source{padding-top:9px;border-top:1px dashed #dfc9ae;color:#71645a!important;font-size:.78rem!important}.ebi-ui .coupon-empty{min-height:150px;margin:0;padding:32px 8px;text-align:center;color:#70645a}.ebi-ui .coupon-empty strong{display:block;margin-bottom:8px;color:var(--ink)}',
       '.ebi-ui .catalog-modal{position:fixed;z-index:12000;inset:0;display:grid;align-items:center;overflow:auto;padding:max(16px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:#21170dcc}.ebi-ui .catalog-modal[hidden]{display:none}.ebi-ui .catalog-modal-panel{position:relative;width:min(100%,560px);max-height:calc(100svh - 32px);margin:auto;overflow:auto;border-radius:20px;background:#fffaf2;box-shadow:0 20px 60px #0008}.ebi-ui .catalog-modal-close{position:sticky;z-index:2;top:10px;float:right;width:46px;min-height:46px;margin:10px 10px -56px 0;padding:0;border-radius:50%;font-size:1.5rem}.ebi-ui .character-detail{padding:20px}.ebi-ui .character-detail .catalog-image{width:min(100%,360px);margin:0 auto 16px}.ebi-ui .character-detail h2{margin:.1rem 0}.ebi-ui .character-detail dl{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;margin:16px 0}.ebi-ui .character-detail dt{font-weight:800}.ebi-ui .character-detail dd{min-width:0;margin:0}',
       '.ebi-ui .message{position:fixed;z-index:12500;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(92vw,520px);background:#30251d;color:#fff;padding:14px 16px;border-radius:14px;box-shadow:0 8px 30px #0004}.ebi-ui .message[hidden]{display:none}.ebi-ui .spinner{width:42px;height:42px;border:5px solid #f3d3c1;border-top-color:var(--ebi);border-radius:50%;animation:ebi-spin .8s linear infinite}',
       '.ebi-ui .fade-out{opacity:0;transition:opacity .2s ease;pointer-events:none}.ebi-ui .fade-in{animation:ebi-fade .25s ease}@keyframes ebi-spin{to{transform:rotate(360deg)}}@keyframes ebi-fade{from{opacity:0}to{opacity:1}}',
@@ -103,7 +109,15 @@
   }
   function createQuest() { var el = screen('screen-quest'); el.append(button('← 戻る', 'game', 'back')); var content = document.createElement('div'); content.id = 'quest-root'; el.append(content); return el; }
   function createAchievement() { var el = screen('screen-achievement'); el.append(button('← 戻る', 'game', 'back')); var content = document.createElement('div'); content.id = 'achievement-root'; el.append(content); return el; }
-  function createCoupons() { var el = screen('screen-coupons'); el.append(button('← 戻る', 'game', 'back')); var heading = document.createElement('h2'); heading.textContent = 'クーポン'; var list = document.createElement('div'); list.id = 'coupon-list'; list.className = 'panel'; el.append(heading, list); return el; }
+  function createCoupons() {
+    var el = screen('screen-coupons'); el.append(button('← 戻る', 'game', 'back'));
+    var heading = document.createElement('h2'); heading.textContent = 'クーポン';
+    var collection = document.createElement('section'); collection.id = 'coupon-collection-progress'; collection.className = 'collection-progress'; collection.setAttribute('aria-labelledby', 'coupon-collection-title');
+    var summary = document.createElement('div'); summary.className = 'coupon-summary';
+    summary.append(Object.assign(document.createElement('p'), { textContent: '獲得した限定クーポン' }), Object.assign(document.createElement('strong'), { id: 'coupon-count', textContent: '0枚' }));
+    var list = document.createElement('div'); list.id = 'coupon-list'; list.className = 'coupon-list'; list.setAttribute('aria-live', 'polite'); list.setAttribute('aria-atomic', 'true');
+    el.append(heading, collection, summary, list); return el;
+  }
   function createSettings() {
     if (EbiAR.sound && typeof EbiAR.sound.getSettings === 'function') settings = Object.assign(settings, EbiAR.sound.getSettings());
     var el = screen('screen-settings'); el.append(button('← 戻る', 'game', 'back'));
@@ -310,12 +324,99 @@
     return state && Array.isArray(state.character?.coupons) ? state.character.coupons : [];
   }
 
+  /** 正式カタログと正規化済みプレイヤー状態から収集進捗を取得する。 */
+  function getCollectionProgress() {
+    var state = EbiAR.game && typeof EbiAR.game.getState === 'function' ? EbiAR.game.getState() : null;
+    var character = state && state.character;
+    if (!EbiAR.character || typeof EbiAR.character.collectionStats !== 'function') return { acquired: 0, total: 0 };
+    var stats = EbiAR.character.collectionStats(character);
+    return {
+      acquired: Math.max(0, Math.min(safeNumber(stats.acquired), safeNumber(stats.total))),
+      total: Math.max(0, safeNumber(stats.total))
+    };
+  }
+
+  /** 既存Quest/Achievement APIから5体収集報酬の達成状態を読み取る。 */
+  function getCollectionRewardStatus(system, completedStatuses, acquired) {
+    var progress = system && typeof system.getProgress === 'function' ? system.getProgress('collection-five') : null;
+    var status = progress && typeof progress.status === 'string' ? progress.status : '';
+    var completed = completedStatuses.indexOf(status) >= 0;
+    var current = progress ? safeNumber(progress.current) : acquired;
+    return { completed: completed, remaining: Math.max(0, 5 - Math.max(current, acquired)) };
+  }
+
+  /** クーポン画面へ捕獲進捗と既存の5体収集報酬を表示する。 */
+  function renderCollectionProgress() {
+    var target = byId('coupon-collection-progress'); if (!target) return;
+    var stats = getCollectionProgress();
+    var firstTarget = 5;
+    var nextText = stats.total === 0
+      ? '収集対象を確認しています'
+      : stats.acquired < firstTarget
+        ? '次の目標：あと' + (firstTarget - stats.acquired) + '体で「5体収集」達成！'
+        : stats.acquired < stats.total
+          ? '✅ 5体収集 達成済み（コンプリートまであと' + (stats.total - stats.acquired) + '体）'
+          : '🎉 正式収集対象をコンプリートしました！';
+    var title = Object.assign(document.createElement('h3'), { id: 'coupon-collection-title', textContent: 'キャラクター収集進捗' });
+    var head = document.createElement('div'); head.className = 'collection-progress-head';
+    var labels = document.createElement('div');
+    labels.append(Object.assign(document.createElement('p'), { textContent: '現在の捕獲数' }), Object.assign(document.createElement('p'), { className: 'collection-total', textContent: '正式収集対象：' + stats.total + '体' }));
+    head.append(labels, Object.assign(document.createElement('strong'), { textContent: stats.acquired + ' / ' + stats.total + '体' }));
+    var progress = document.createElement('progress'); progress.max = Math.max(1, stats.total); progress.value = stats.acquired; progress.setAttribute('role', 'progressbar'); progress.setAttribute('aria-label', 'キャラクター収集進捗'); progress.setAttribute('aria-valuemin', '0'); progress.setAttribute('aria-valuemax', String(stats.total)); progress.setAttribute('aria-valuenow', String(stats.acquired)); progress.setAttribute('aria-valuetext', stats.acquired + ' / ' + stats.total + '体');
+    var next = Object.assign(document.createElement('p'), { className: 'collection-next', textContent: nextText });
+    var rewards = document.createElement('div'); rewards.className = 'collection-rewards'; rewards.setAttribute('aria-label', '5体収集時の既存報酬');
+    var achievementStatus = getCollectionRewardStatus(EbiAR.Achievement, ['unlocked', 'claimed'], stats.acquired);
+    var questStatus = getCollectionRewardStatus(EbiAR.Quest, ['completed', 'claimed'], stats.acquired);
+    [
+      ['【5体収集 実績】', '500pt・経験値 +250・コイン +50・限定クーポン', achievementStatus],
+      ['【5体収集 クエスト】', '500pt・経験値 +250・コイン +50・クーポン', questStatus]
+    ].forEach(function (reward) {
+      var row = document.createElement('div'); row.className = 'collection-reward';
+      var rewardStatusText = reward[2].completed ? '✅ 達成済み' : reward[2].remaining > 0 ? '未達成（あと' + reward[2].remaining + '体）' : '未達成（進行条件を確認中）';
+      var status = Object.assign(document.createElement('span'), { className: 'collection-reward-status', textContent: rewardStatusText });
+      row.append(Object.assign(document.createElement('strong'), { textContent: reward[0] }), Object.assign(document.createElement('span'), { textContent: reward[1] }), status); rewards.appendChild(row);
+    });
+    target.replaceChildren(title, head, progress, next, rewards);
+  }
+
+  /** 保存形式の文字列・将来のオブジェクト形式を安全な表示モデルへ変換する。 */
+  function normalizeCoupon(coupon) {
+    var id = typeof coupon === 'string' ? coupon : (coupon && typeof coupon.id === 'string' ? coupon.id : '');
+    if (!id || id.length > 128) return null;
+    var definition = COUPON_DEFINITIONS[id] || {};
+    var suppliedName = coupon && typeof coupon.name === 'string' ? coupon.name.trim().slice(0, 80) : '';
+    if (suppliedName === id || /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(suppliedName)) suppliedName = '';
+    return {
+      id: id,
+      name: definition.name || suppliedName || '獲得済みクーポン',
+      description: coupon && typeof coupon.description === 'string' && coupon.description.trim() ? coupon.description.trim().slice(0, 160) : '獲得済みの特典クーポンです。',
+      source: coupon && typeof coupon.source === 'string' && coupon.source.trim() ? coupon.source.trim().slice(0, 100) : (definition.source || 'ゲーム内報酬')
+    };
+  }
+
   function renderCoupons(coupons) {
     var target = byId('coupon-list'); if (!target) return;
-    var values = coupons || getSavedCoupons();
+    renderCollectionProgress();
+    var values = Array.isArray(coupons) ? coupons : getSavedCoupons();
+    var seen = new Set();
+    var items = values.map(normalizeCoupon).filter(function (coupon) {
+      if (!coupon || seen.has(coupon.id)) return false;
+      seen.add(coupon.id); return true;
+    });
     target.replaceChildren();
-    if (!values.length) { target.textContent = '利用できるクーポンはありません。'; return; }
-    values.forEach(function (coupon) { var row = document.createElement('p'); row.textContent = typeof coupon === 'string' ? coupon : (coupon.name || coupon.id || 'クーポン'); target.appendChild(row); });
+    setText('coupon-count', items.length.toLocaleString() + '枚');
+    if (!items.length) {
+      var empty = document.createElement('p'); empty.className = 'coupon-empty';
+      empty.append(Object.assign(document.createElement('strong'), { textContent: 'クーポンはまだありません' }), document.createElement('br'), text('クエストや実績を達成すると獲得できます。'));
+      target.appendChild(empty); return;
+    }
+    items.forEach(function (coupon) {
+      var card = document.createElement('article'); card.className = 'coupon-card';
+      var heading = document.createElement('h3'); heading.textContent = coupon.name;
+      var description = document.createElement('p'); description.textContent = coupon.description;
+      var source = document.createElement('p'); source.className = 'coupon-source'; source.textContent = '取得元：' + coupon.source;
+      card.append(heading, description, source); target.appendChild(card);
+    });
   }
 
   /** Save load/import/reset後にAudioManagerの値を設定フォームへ同期する。 */
@@ -379,18 +480,19 @@
     unsubscribe.push(EbiAR.events.on('gps:spots-updated', updateGpsSpots));
     unsubscribe.push(EbiAR.events.on('gps:spot-arrived', function (event) { renderSpot(event.spot); showMessage(event.spot.name + ' に到着しました'); }));
     unsubscribe.push(EbiAR.events.on('gps:error', renderGpsError));
-    unsubscribe.push(EbiAR.events.on('character:acquired', function (event) { showMessage((event.character && event.character.name || 'キャラクター') + 'を発見！'); }));
+    unsubscribe.push(EbiAR.events.on('character:acquired', function (event) { showMessage((event.character && event.character.name || 'キャラクター') + 'を発見！'); if (currentScreen === 'coupons') renderCollectionProgress(); }));
     unsubscribe.push(EbiAR.events.on('ar:spot-complete', function (event) { showMessage((event.spot && event.spot.name || 'このスポット') + 'のキャラクターはすべて発見しました'); }));
     unsubscribe.push(EbiAR.events.on('character:levelup', function () { showMessage('レベルアップ！'); }));
-    unsubscribe.push(EbiAR.events.on('quest:complete', function (event) { showMessage('クエスト達成：' + (event.quest && event.quest.title || '')); }));
-    unsubscribe.push(EbiAR.events.on('achievement:unlock', function (event) { showMessage('実績解除：' + (event.achievement && event.achievement.title || '')); }));
+    unsubscribe.push(EbiAR.events.on('quest:complete', function (event) { showMessage('クエスト達成：' + (event.quest && event.quest.title || '')); if (currentScreen === 'coupons') renderCollectionProgress(); }));
+    unsubscribe.push(EbiAR.events.on('achievement:unlock', function (event) { showMessage('実績解除：' + (event.achievement && event.achievement.title || '')); if (currentScreen === 'coupons') renderCollectionProgress(); }));
     unsubscribe.push(EbiAR.events.on('quest:error', function () { showMessage('クエスト処理でエラーが発生しました。'); }));
     unsubscribe.push(EbiAR.events.on('achievement:error', function () { showMessage('実績処理でエラーが発生しました。'); }));
+    unsubscribe.push(EbiAR.events.on('coupon:acquired', function () { if (currentScreen === 'coupons') renderCoupons(); }));
     unsubscribe.push(EbiAR.events.on('story:start', function (event) { showMessage('ストーリー開始：' + (event.story && event.story.title || '')); }));
     unsubscribe.push(EbiAR.events.on('story:complete', function (event) { showMessage('ストーリー完了：' + (event.story && event.story.title || '')); }));
-    unsubscribe.push(EbiAR.events.on('save:loaded', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); }));
-    unsubscribe.push(EbiAR.events.on('save:imported', syncAudioSettingsControls));
-    unsubscribe.push(EbiAR.events.on('save:reset', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); }));
+    unsubscribe.push(EbiAR.events.on('save:loaded', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); if (currentScreen === 'coupons') renderCoupons(); }));
+    unsubscribe.push(EbiAR.events.on('save:imported', function () { syncAudioSettingsControls(); if (currentScreen === 'coupons') renderCoupons(); }));
+    unsubscribe.push(EbiAR.events.on('save:reset', function () { syncAudioSettingsControls(); refreshCatalogIfVisible(); if (currentScreen === 'coupons') renderCoupons([]); }));
   }
 
   /** UIを初期化し、タイトル画面を表示する。 */
