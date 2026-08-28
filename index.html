@@ -12,9 +12,33 @@
   <link rel="apple-touch-icon" href="./images/icons/apple-touch-icon.png">
   <title>海老フライ王国AR ～日野町大冒険～</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="opening.css">
 </head>
 <body>
   <main id="app" aria-live="polite"><p>海老フライ王国ARを起動しています…</p></main>
+  <section id="opening-screen" class="opening-screen" role="dialog" aria-modal="true" aria-labelledby="opening-title" aria-describedby="opening-hint">
+    <div class="opening-screen__sky" aria-hidden="true"></div>
+    <img class="opening-screen__art" src="images/opening/opening-adventure.webp" alt="" aria-hidden="true" decoding="async" fetchpriority="high">
+    <div class="opening-screen__content">
+      <header class="opening-screen__header">
+        <p class="opening-screen__kicker">Project EBI</p>
+        <h1 id="opening-title">海老フライ王国AR</h1>
+        <p>～日野町大冒険～</p>
+      </header>
+      <div class="opening-screen__visual" data-opening-art-slot>
+        <span class="opening-screen__sun" aria-hidden="true"></span>
+        <span class="opening-screen__hill opening-screen__hill--far" aria-hidden="true"></span>
+        <span class="opening-screen__hill opening-screen__hill--near" aria-hidden="true"></span>
+        <img class="opening-screen__hero" src="images/characters/ebi-maru.webp" alt="冒険へ出発するエビ丸" decoding="async" fetchpriority="high">
+      </div>
+      <p id="opening-hint" class="opening-screen__hint">日野町には、まだ見つかっていない海老たちがいる…</p>
+      <div class="opening-screen__footer">
+        <p id="opening-status" class="opening-screen__status" role="status" aria-live="polite">冒険の準備中…</p>
+        <span class="opening-screen__loader" aria-hidden="true"></span>
+        <button id="opening-start" class="opening-screen__cta" type="button" disabled>タップして冒険をはじめる</button>
+      </div>
+    </div>
+  </section>
   <script src="js/config.js"></script>
   <script src="js/spots.js"></script>
   <script src="js/character.js"></script>
@@ -28,13 +52,22 @@
   <script src="js/story.js"></script>
   <script src="js/ending.js"></script>
   <script src="js/save.js?rev=audio-system"></script>
-  <script src="js/sound.js?rev=audio-9-production"></script>
+  <script src="js/sound.js?rev=opening-future-2-production"></script>
   <script src="js/effect.js"></script>
   <script src="js/ui.js?rev=coupon-collection-progress-final"></script>
+  <script src="js/opening.js?rev=opening-future-2-production"></script>
   <script src="js/ar.js?rev=audio-1"></script>
   <script>
     window.addEventListener('DOMContentLoaded', function () {
       var saved = null;
+      var deferredSystemsInitialized = false;
+      function initializeDeferredSystems() {
+        if (deferredSystemsInitialized) return;
+        deferredSystemsInitialized = true;
+        EbiAR.Story.initialize(saved && saved.story);
+        EbiAR.Ending.initialize(saved && saved.ending);
+        EbiAR.ui.showScreen('title');
+      }
       try { saved = EbiAR.save.loadGame(); } catch (error) { console.warn('セーブデータを読み込めませんでした。', error); }
       EbiAR.game.initialize(saved ? {
         character: saved.player,
@@ -43,14 +76,17 @@
       } : undefined);
       EbiAR.game.connectSystems();
       EbiAR.ui.init();
-      EbiAR.Story.initialize(saved && saved.story);
-      EbiAR.Ending.initialize(saved && saved.ending);
       EbiAR.events.on('ui:start-requested', function () {
         EbiAR.sound.unlock();
         EbiAR.gps.start();
         EbiAR.events.emit('game:started', { started: true, startedAt: new Date().toISOString() });
       });
       EbiAR.effect.init();
+      try {
+        if (!EbiAR.Opening || !EbiAR.Opening.initialize({ onComplete: initializeDeferredSystems })) initializeDeferredSystems();
+      } catch (error) {
+        initializeDeferredSystems();
+      }
     });
   </script>
   <script src="./js/pwa.js"></script>

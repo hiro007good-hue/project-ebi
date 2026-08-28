@@ -1,7 +1,7 @@
 /* Project EBI PWA cache. Increment CACHE_VERSION whenever the app shell changes. */
 'use strict';
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}`;
 const CHARACTER_CACHE = `project-ebi-characters-${CACHE_VERSION}`;
 const AUDIO_CACHE = `project-ebi-audio-${CACHE_VERSION}`;
@@ -11,6 +11,7 @@ const APP_SHELL = [
   './',
   './index.html',
   './style.css',
+  './opening.css',
   './manifest.webmanifest',
   OFFLINE_URL,
   './js/config.js',
@@ -27,8 +28,11 @@ const APP_SHELL = [
   './js/ending.js',
   './js/save.js',
   './js/sound.js',
+  './js/sound.js?rev=opening-future-2-production',
   './js/effect.js',
   './js/ui.js',
+  './js/opening.js',
+  './js/opening.js?rev=opening-future-2-production',
   './js/ar.js',
   './js/pwa.js',
   './images/icons/icon-192.png',

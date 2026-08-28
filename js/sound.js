@@ -14,7 +14,8 @@
   var DEFAULT_ASSETS = Object.freeze({
     bgm: Object.freeze({
       adventure: 'sounds/bgm-adventure.mp3',
-      'adventure-theme': 'sounds/bgm-adventure.mp3'
+      'adventure-theme': 'sounds/bgm-adventure.mp3',
+      'opening-future-2': 'sounds/bgm-opening-future-2.mp3'
     }),
     se: Object.freeze({
       characterDiscovery: 'sounds/se_discover.mp3',

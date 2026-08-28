@@ -107,6 +107,10 @@
 |---|---|---|---|---|---|---|
 | `title` | `sounds/bgm-title.mp3` | 現在呼出なし | タイトル画面用として定義のみ | あり | A | 未配置・未接続 |
 | `adventure` | `sounds/bgm-adventure.mp3` | `ui:start-requested`後の直接呼出 | 「冒険をはじめる」操作後 | あり | A | 未配置・接続済み |
+| `opening-future-2` | `sounds/bgm-opening-future-2.mp3` | Opening CTA | Audio-9 unlock後からタイトル画面まで継続 | あり | A | 正式配置済み・接続済み |
+
+Opening BGM「Future_2」は[Springin’ Sound Stock](https://www.springin.org/sound-stock/)提供音源を、Project EBIのゲームBGMとして原音のまま使用します。
+Opening画像`images/opening/opening-adventure.webp`はProject EBIオリジナル（OpenAI生成）です。
 
 ### 効果音
 
