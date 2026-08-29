@@ -39,6 +39,106 @@
   var visualSettled = false;
   var minimumDelayElapsed = false;
   var appAriaHidden = null;
+  var audioDiagEnabled = false;
+  var audioDiagPanel = null;
+  var audioDiagInstalled = false;
+  var audioDiagMedia = typeof global.WeakSet === 'function' ? new global.WeakSet() : null;
+
+  function userActivationSnapshot() {
+    var activation = global.navigator && global.navigator.userActivation;
+    return {
+      isActive: activation ? activation.isActive : 'unsupported',
+      hasBeenActive: activation ? activation.hasBeenActive : 'unsupported'
+    };
+  }
+
+  function audioDiagData(media) {
+    return {
+      activation: userActivationSnapshot(),
+      src: media ? (media.currentSrc || media.src || '') : '',
+      readyState: media ? media.readyState : null,
+      networkState: media ? media.networkState : null,
+      paused: media ? media.paused : null
+    };
+  }
+
+  function writeAudioDiag(label, detail) {
+    if (!audioDiagEnabled || !audioDiagPanel) return;
+    var line = global.document.createElement('div');
+    var suffix = detail === undefined ? '' : ' ' + JSON.stringify(detail);
+    line.textContent = new Date().toISOString().slice(11, 23) + ' ' + label + suffix;
+    audioDiagPanel.appendChild(line);
+    audioDiagPanel.scrollTop = audioDiagPanel.scrollHeight;
+  }
+
+  function isOpeningAudio(media) {
+    return !!media && /\/sounds\/bgm-opening-future-2\.mp3(?:[?#]|$)/i.test(media.currentSrc || media.src || '');
+  }
+
+  function observeOpeningAudio(media) {
+    if (!media || (audioDiagMedia && audioDiagMedia.has(media))) return;
+    if (audioDiagMedia) audioDiagMedia.add(media);
+    ['loadstart', 'loadedmetadata', 'canplay', 'playing', 'pause', 'stalled', 'waiting', 'error'].forEach(function (name) {
+      media.addEventListener(name, function () {
+        if (!isOpeningAudio(media)) return;
+        var detail = audioDiagData(media);
+        if (name === 'error' && media.error) {
+          detail.error = { code: media.error.code, message: media.error.message || '' };
+        }
+        writeAudioDiag('media:' + name, detail);
+      });
+    });
+  }
+
+  function installAudioDiagnostic() {
+    if (audioDiagInstalled) return;
+    var enabled = false;
+    try { enabled = new global.URLSearchParams(global.location.search).get('audioDiag') === '1'; }
+    catch (error) { enabled = false; }
+    if (!enabled) return;
+    audioDiagInstalled = true;
+    audioDiagEnabled = true;
+    audioDiagPanel = global.document.createElement('aside');
+    audioDiagPanel.id = 'opening-audio-diagnostic';
+    audioDiagPanel.setAttribute('role', 'log');
+    audioDiagPanel.setAttribute('aria-live', 'polite');
+    audioDiagPanel.style.cssText = 'position:fixed;z-index:2147483647;left:8px;right:8px;bottom:8px;max-height:42vh;overflow:auto;padding:8px;background:rgba(0,0,0,.88);color:#d8ffd8;font:11px/1.4 monospace;text-align:left;white-space:pre-wrap;border:1px solid #7cff7c;border-radius:6px;';
+    global.document.body.appendChild(audioDiagPanel);
+    writeAudioDiag('diagnostic enabled', userActivationSnapshot());
+
+    var prototype = global.HTMLMediaElement && global.HTMLMediaElement.prototype;
+    if (!prototype || typeof prototype.load !== 'function' || typeof prototype.play !== 'function') {
+      writeAudioDiag('HTMLMediaElement unavailable');
+      return;
+    }
+    var nativeLoad = prototype.load;
+    var nativePlay = prototype.play;
+    prototype.load = function () {
+      if (isOpeningAudio(this)) {
+        observeOpeningAudio(this);
+        writeAudioDiag('HTMLAudio load()', audioDiagData(this));
+      }
+      return nativeLoad.apply(this, arguments);
+    };
+    prototype.play = function () {
+      if (!isOpeningAudio(this)) return nativePlay.apply(this, arguments);
+      observeOpeningAudio(this);
+      writeAudioDiag('HTMLAudio play() call', audioDiagData(this));
+      var result;
+      try { result = nativePlay.apply(this, arguments); }
+      catch (error) {
+        writeAudioDiag('play() rejected', { name: error.name || '', message: error.message || String(error) });
+        throw error;
+      }
+      return Promise.resolve(result).then(function (value) {
+        writeAudioDiag('play() resolved', userActivationSnapshot());
+        return value;
+      }, function (error) {
+        writeAudioDiag('play() rejected', { name: error.name || '', message: error.message || String(error), activation: userActivationSnapshot() });
+        throw error;
+      });
+    };
+  }
 
   function emit(name, detail) {
     if (EbiAR.events) EbiAR.events.emit('opening:' + name, detail || { state: state });
@@ -139,12 +239,19 @@
   }
 
   function requestOpeningBgm(unlocked) {
+    writeAudioDiag('playBgm gate', { unlocked: !!unlocked, activation: userActivationSnapshot() });
     if (!unlocked || !EbiAR.sound || typeof EbiAR.sound.playBgm !== 'function') return Promise.resolve(false);
     var settings = typeof EbiAR.sound.getSettings === 'function' ? EbiAR.sound.getSettings() : null;
+    writeAudioDiag('BGM settings', settings ? { bgmEnabled: settings.bgmEnabled, bgmVolume: settings.bgmVolume } : null);
     if (!settings || !settings.bgmEnabled || Number(settings.bgmVolume) <= 0) return Promise.resolve(false);
     try {
       var id = openingBgmId();
       if (!id) return Promise.resolve(false);
+      writeAudioDiag('playBgm call', {
+        id: id,
+        resolvedUrl: new global.URL('sounds/bgm-opening-future-2.mp3', global.document.baseURI).href,
+        activation: userActivationSnapshot()
+      });
       return Promise.resolve(EbiAR.sound.playBgm(id, { fadeMs: 800 })).catch(function () { return false; });
     } catch (error) {
       return Promise.resolve(false);
@@ -153,15 +260,20 @@
 
   function beginExit() {
     if (state !== STATES.READY) return false;
+    writeAudioDiag('CTA handler entry', userActivationSnapshot());
     setState(STATES.EXITING);
     if (cta) cta.disabled = true;
     if (status) status.textContent = '王国の扉を開いています…';
     var unlockPromise = Promise.resolve(false);
     if (EbiAR.sound && typeof EbiAR.sound.unlock === 'function') {
+      writeAudioDiag('unlock start', userActivationSnapshot());
       try { unlockPromise = Promise.resolve(EbiAR.sound.unlock()).catch(function () { return false; }); }
       catch (error) { unlockPromise = Promise.resolve(false); }
     }
-    unlockPromise.then(requestOpeningBgm).catch(function () { return false; });
+    unlockPromise.then(function (unlocked) {
+      writeAudioDiag('unlock resolved', { unlocked: !!unlocked, activation: userActivationSnapshot() });
+      return requestOpeningBgm(unlocked);
+    }).catch(function () { return false; });
     root.classList.add('is-exiting');
     exitTimer = global.setTimeout(finish, reducedMotion() ? 100 : 650);
     return true;
@@ -211,6 +323,7 @@
   function initialize(options) {
     options = options || {};
     if (state !== STATES.INITIAL) return false;
+    installAudioDiagnostic();
     root = global.document.getElementById('opening-screen');
     app = global.document.getElementById('app');
     if (!root) return false;
