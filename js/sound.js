@@ -436,10 +436,18 @@
   function playBgm(id, options) {
     options = options || {};
     var source = assets.bgm[id];
+    var userGesture = options.userGesture === true;
     if (!source || !canUseAudio() || destroyed) return Promise.resolve(false);
     if (!settings.bgmEnabled || global.document?.hidden) { pendingBgmId = id; return Promise.resolve(false); }
-    if (!unlocked) { pendingBgmId = id; emit('audio:blocked', { id: id, reason: 'user_gesture_required' }); return Promise.resolve(false); }
+    if (!unlocked && !userGesture) { pendingBgmId = id; emit('audio:blocked', { id: id, reason: 'user_gesture_required' }); return Promise.resolve(false); }
     if (currentBgmId === id && currentBgm && currentBgmEntry) {
+      if (userGesture) {
+        currentBgm.volume = options.fadeMs ? 0 : channelVolume('bgm');
+        return attemptPlay(currentBgm, id).then(function (played) {
+          if (played && options.fadeMs) return fade(currentBgm, channelVolume('bgm'), options.fadeMs).then(function () { return true; });
+          return played;
+        });
+      }
       return currentBgmEntry.ready.then(function (ready) {
         return ready && currentBgmEntry && currentBgmEntry.state === 'READY' ? attemptPlay(currentBgm, id) : false;
       });
@@ -450,6 +458,13 @@
     currentBgmId = id;
     if (!currentBgm) return Promise.resolve(false);
     var requestedEntry = currentBgmEntry;
+    if (userGesture) {
+      currentBgm.volume = options.fadeMs ? 0 : channelVolume('bgm');
+      return attemptPlay(currentBgm, id).then(function (played) {
+        if (played && options.fadeMs) return fade(currentBgm, channelVolume('bgm'), options.fadeMs).then(function () { return true; });
+        return played;
+      });
+    }
     return requestedEntry.ready.then(function (ready) {
       if (!ready || currentBgmEntry !== requestedEntry || !settings.bgmEnabled || global.document?.hidden || destroyed) return false;
       currentBgm.volume = options.fadeMs ? 0 : channelVolume('bgm');

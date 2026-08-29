@@ -124,17 +124,24 @@
       if (!isOpeningAudio(this)) return nativePlay.apply(this, arguments);
       observeOpeningAudio(this);
       writeAudioDiag('HTMLAudio play() call', audioDiagData(this));
+      var media = this;
       var result;
       try { result = nativePlay.apply(this, arguments); }
       catch (error) {
-        writeAudioDiag('play() rejected', { name: error.name || '', message: error.message || String(error) });
+        var syncDetail = audioDiagData(media);
+        syncDetail.name = error.name || '';
+        syncDetail.message = error.message || String(error);
+        writeAudioDiag('play() rejected', syncDetail);
         throw error;
       }
       return Promise.resolve(result).then(function (value) {
         writeAudioDiag('play() resolved', userActivationSnapshot());
         return value;
       }, function (error) {
-        writeAudioDiag('play() rejected', { name: error.name || '', message: error.message || String(error), activation: userActivationSnapshot() });
+        var detail = audioDiagData(media);
+        detail.name = error.name || '';
+        detail.message = error.message || String(error);
+        writeAudioDiag('play() rejected', detail);
         throw error;
       });
     };
@@ -238,9 +245,9 @@
     return true;
   }
 
-  function requestOpeningBgm(unlocked) {
-    writeAudioDiag('playBgm gate', { unlocked: !!unlocked, activation: userActivationSnapshot() });
-    if (!unlocked || !EbiAR.sound || typeof EbiAR.sound.playBgm !== 'function') return Promise.resolve(false);
+  function requestOpeningBgm() {
+    writeAudioDiag('playBgm gate', { explicitUserGesture: true, activation: userActivationSnapshot() });
+    if (!EbiAR.sound || typeof EbiAR.sound.playBgm !== 'function') return Promise.resolve(false);
     var settings = typeof EbiAR.sound.getSettings === 'function' ? EbiAR.sound.getSettings() : null;
     writeAudioDiag('BGM settings', settings ? { bgmEnabled: settings.bgmEnabled, bgmVolume: settings.bgmVolume } : null);
     if (!settings || !settings.bgmEnabled || Number(settings.bgmVolume) <= 0) return Promise.resolve(false);
@@ -252,7 +259,7 @@
         resolvedUrl: new global.URL('sounds/bgm-opening-future-2.mp3', global.document.baseURI).href,
         activation: userActivationSnapshot()
       });
-      return Promise.resolve(EbiAR.sound.playBgm(id, { fadeMs: 800 })).catch(function () { return false; });
+      return Promise.resolve(EbiAR.sound.playBgm(id, { fadeMs: 800, userGesture: true })).catch(function () { return false; });
     } catch (error) {
       return Promise.resolve(false);
     }
@@ -270,9 +277,10 @@
       try { unlockPromise = Promise.resolve(EbiAR.sound.unlock()).catch(function () { return false; }); }
       catch (error) { unlockPromise = Promise.resolve(false); }
     }
+    requestOpeningBgm().catch(function () { return false; });
     unlockPromise.then(function (unlocked) {
       writeAudioDiag('unlock resolved', { unlocked: !!unlocked, activation: userActivationSnapshot() });
-      return requestOpeningBgm(unlocked);
+      return unlocked;
     }).catch(function () { return false; });
     root.classList.add('is-exiting');
     exitTimer = global.setTimeout(finish, reducedMotion() ? 100 : 650);
