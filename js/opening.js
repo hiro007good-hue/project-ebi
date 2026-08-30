@@ -86,7 +86,7 @@
   function previewDiagnosticBgm(id) {
     audioDiagBgmId = id === SAFARI_TEST_BGM_ID ? SAFARI_TEST_BGM_ID : DEFAULT_BGM_ID;
     if (root) root.dataset.bgmId = audioDiagBgmId;
-    writeAudioDiag('diagnostic source selected', {
+    writeAudioDiag('diagnostic selection: ' + audioDiagBgmId, {
       id: audioDiagBgmId,
       resolvedUrl: new global.URL(openingBgmUrl(audioDiagBgmId), global.document.baseURI).href,
       activation: userActivationSnapshot()
@@ -98,13 +98,17 @@
       try { Promise.resolve(EbiAR.sound.unlock()).catch(function () { return false; }); }
       catch (error) { /* 診断試聴失敗はOpeningを妨げない。 */ }
     }
+    if (typeof EbiAR.sound.stopBgm === 'function') {
+      try { EbiAR.sound.stopBgm(); }
+      catch (error) { /* 診断試聴の停止失敗はOpeningを妨げない。 */ }
+    }
     try { Promise.resolve(EbiAR.sound.playBgm(audioDiagBgmId, { userGesture: true })).catch(function () { return false; }); }
     catch (error) { /* 診断試聴失敗はOpeningを妨げない。 */ }
   }
 
   function appendAudioDiagnosticControls() {
     var controls = global.document.createElement('div');
-    controls.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px;';
+    controls.style.cssText = 'position:sticky;z-index:1;top:0;display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px;padding:6px;background:#0b120b;border-bottom:1px solid #7cff7c;';
     [
       ['Original Future_2', DEFAULT_BGM_ID],
       ['Safari Test', SAFARI_TEST_BGM_ID]
@@ -112,7 +116,7 @@
       var button = global.document.createElement('button');
       button.type = 'button';
       button.textContent = item[0];
-      button.style.cssText = 'padding:5px 8px;border:1px solid #7cff7c;border-radius:4px;background:#172417;color:#eaffea;font:12px sans-serif;';
+      button.style.cssText = 'min-height:40px;padding:8px 12px;border:1px solid #7cff7c;border-radius:6px;background:#172417;color:#eaffea;font:600 13px sans-serif;touch-action:manipulation;';
       button.addEventListener('click', function () { previewDiagnosticBgm(item[1]); });
       controls.appendChild(button);
     });
