@@ -22,6 +22,7 @@
     '安全を確かめてからARの冒険を楽しもう！'
   ]);
   var DEFAULT_BGM_ID = 'opening-future-2';
+  var SAFARI_TEST_BGM_ID = 'opening-future-2-safari-test';
 
   var state = STATES.INITIAL;
   var root = null;
@@ -43,6 +44,7 @@
   var audioDiagPanel = null;
   var audioDiagInstalled = false;
   var audioDiagMedia = typeof global.WeakSet === 'function' ? new global.WeakSet() : null;
+  var audioDiagBgmId = DEFAULT_BGM_ID;
 
   function userActivationSnapshot() {
     var activation = global.navigator && global.navigator.userActivation;
@@ -72,7 +74,49 @@
   }
 
   function isOpeningAudio(media) {
-    return !!media && /\/sounds\/bgm-opening-future-2\.mp3(?:[?#]|$)/i.test(media.currentSrc || media.src || '');
+    return !!media && /\/sounds\/bgm-opening-future-2(?:-safari-test)?\.mp3(?:[?#]|$)/i.test(media.currentSrc || media.src || '');
+  }
+
+  function openingBgmUrl(id) {
+    return id === SAFARI_TEST_BGM_ID
+      ? 'sounds/bgm-opening-future-2-safari-test.mp3'
+      : 'sounds/bgm-opening-future-2.mp3';
+  }
+
+  function previewDiagnosticBgm(id) {
+    audioDiagBgmId = id === SAFARI_TEST_BGM_ID ? SAFARI_TEST_BGM_ID : DEFAULT_BGM_ID;
+    if (root) root.dataset.bgmId = audioDiagBgmId;
+    writeAudioDiag('diagnostic source selected', {
+      id: audioDiagBgmId,
+      resolvedUrl: new global.URL(openingBgmUrl(audioDiagBgmId), global.document.baseURI).href,
+      activation: userActivationSnapshot()
+    });
+    if (!EbiAR.sound || typeof EbiAR.sound.playBgm !== 'function') return;
+    var settings = typeof EbiAR.sound.getSettings === 'function' ? EbiAR.sound.getSettings() : null;
+    if (!settings || !settings.bgmEnabled || Number(settings.bgmVolume) <= 0) return;
+    if (typeof EbiAR.sound.unlock === 'function') {
+      try { Promise.resolve(EbiAR.sound.unlock()).catch(function () { return false; }); }
+      catch (error) { /* 診断試聴失敗はOpeningを妨げない。 */ }
+    }
+    try { Promise.resolve(EbiAR.sound.playBgm(audioDiagBgmId, { userGesture: true })).catch(function () { return false; }); }
+    catch (error) { /* 診断試聴失敗はOpeningを妨げない。 */ }
+  }
+
+  function appendAudioDiagnosticControls() {
+    var controls = global.document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px;';
+    [
+      ['Original Future_2', DEFAULT_BGM_ID],
+      ['Safari Test', SAFARI_TEST_BGM_ID]
+    ].forEach(function (item) {
+      var button = global.document.createElement('button');
+      button.type = 'button';
+      button.textContent = item[0];
+      button.style.cssText = 'padding:5px 8px;border:1px solid #7cff7c;border-radius:4px;background:#172417;color:#eaffea;font:12px sans-serif;';
+      button.addEventListener('click', function () { previewDiagnosticBgm(item[1]); });
+      controls.appendChild(button);
+    });
+    audioDiagPanel.appendChild(controls);
   }
 
   function observeOpeningAudio(media) {
@@ -104,6 +148,7 @@
     audioDiagPanel.setAttribute('aria-live', 'polite');
     audioDiagPanel.style.cssText = 'position:fixed;z-index:2147483647;left:8px;right:8px;bottom:8px;max-height:42vh;overflow:auto;padding:8px;background:rgba(0,0,0,.88);color:#d8ffd8;font:11px/1.4 monospace;text-align:left;white-space:pre-wrap;border:1px solid #7cff7c;border-radius:6px;';
     global.document.body.appendChild(audioDiagPanel);
+    appendAudioDiagnosticControls();
     writeAudioDiag('diagnostic enabled', userActivationSnapshot());
 
     var prototype = global.HTMLMediaElement && global.HTMLMediaElement.prototype;
@@ -182,7 +227,7 @@
   }
 
   function openingBgmId() {
-    return DEFAULT_BGM_ID;
+    return audioDiagEnabled ? audioDiagBgmId : DEFAULT_BGM_ID;
   }
 
   function markReady() {
@@ -256,7 +301,7 @@
       if (!id) return Promise.resolve(false);
       writeAudioDiag('playBgm call', {
         id: id,
-        resolvedUrl: new global.URL('sounds/bgm-opening-future-2.mp3', global.document.baseURI).href,
+        resolvedUrl: new global.URL(openingBgmUrl(id), global.document.baseURI).href,
         activation: userActivationSnapshot()
       });
       return Promise.resolve(EbiAR.sound.playBgm(id, { fadeMs: 800, userGesture: true })).catch(function () { return false; });

@@ -15,7 +15,8 @@
     bgm: Object.freeze({
       adventure: 'sounds/bgm-adventure.mp3',
       'adventure-theme': 'sounds/bgm-adventure.mp3',
-      'opening-future-2': 'sounds/bgm-opening-future-2.mp3'
+      'opening-future-2': 'sounds/bgm-opening-future-2.mp3',
+      'opening-future-2-safari-test': 'sounds/bgm-opening-future-2-safari-test.mp3'
     }),
     se: Object.freeze({
       characterDiscovery: 'sounds/se_discover.mp3',
