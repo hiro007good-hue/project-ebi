@@ -90,6 +90,13 @@ self.addEventListener('fetch', function (event) {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Mediaのbyte rangeは元サーバーへ渡し、必ず206/Content-Rangeを保持する。
+  // Cache APIの通常200応答をRange要求へ返すとSafari/PWAが再生不能になる。
+  if (request.headers.get('range')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request, OFFLINE_URL));
     return;
