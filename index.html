@@ -90,5 +90,15 @@
     });
   </script>
   <script src="./js/pwa.js"></script>
+  <script>
+    (function () {
+      try {
+        if (new URLSearchParams(window.location.search).get('swDiag') !== '1') return;
+        var script = document.createElement('script');
+        script.src = './js/sw-diagnostic.js?rev=safari-sw-range-diagnostic-2';
+        document.head.appendChild(script);
+      } catch (error) { /* 診断機能はゲーム起動を妨げない。 */ }
+    }());
+  </script>
 </body>
 </html>
