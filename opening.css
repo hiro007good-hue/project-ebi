@@ -11,7 +11,7 @@ body.is-opening-visible { overflow: hidden; }
   min-height: 100dvh;
   overflow: auto;
   padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
-  background: linear-gradient(180deg, #173d52 0%, #367b82 37%, #f3aa54 72%, #5a2819 100%);
+  background: transparent;
   color: #fffaf2;
   font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
   opacity: 1;
@@ -39,7 +39,7 @@ body.is-opening-visible { overflow: hidden; }
   height: 100%;
   object-fit: cover;
   object-position: center center;
-  opacity: 0;
+  opacity: 1;
   transform: scale(1);
   transition: opacity 240ms ease;
 }
@@ -49,32 +49,7 @@ body.is-opening-visible { overflow: hidden; }
   animation: opening-art-zoom 12s ease-out both;
 }
 
-.opening-screen.has-opening-art .opening-screen__sky,
-.opening-screen.has-opening-art .opening-screen__sun,
-.opening-screen.has-opening-art .opening-screen__hill,
 .opening-screen.has-opening-art .opening-screen__hero { opacity: 0; visibility: hidden; }
-
-.opening-screen__sky {
-  position: fixed;
-  z-index: -2;
-  inset: 0;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 18% 17%, #fff8d8 0 2px, transparent 3px),
-    radial-gradient(circle at 79% 25%, #fff8d8 0 2px, transparent 3px),
-    radial-gradient(circle at 66% 11%, #fff8d8aa 0 1px, transparent 2px),
-    linear-gradient(155deg, transparent 40%, #ffd77b28 40% 42%, transparent 42%);
-}
-
-.opening-screen__sky::after {
-  content: "";
-  position: absolute;
-  inset: auto -12% -15% -12%;
-  height: 42%;
-  border-radius: 50% 50% 0 0;
-  background: linear-gradient(165deg, #4f6f3d, #183827 65%);
-  box-shadow: 0 -18px 60px #f6c46a40;
-}
 
 .opening-screen__content {
   width: min(100%, 520px);
@@ -100,22 +75,8 @@ body.is-opening-visible { overflow: hidden; }
   overflow: hidden;
   display: grid;
   place-items: end center;
-  border: 1px solid #ffe5a74d;
   border-radius: clamp(22px, 7vw, 42px);
-  background: radial-gradient(circle at 50% 35%, #ffefaecf 0 7%, #f49c4a66 28%, #173d5233 60%), linear-gradient(180deg, #ffffff0f, #2d170b66);
-  box-shadow: inset 0 0 50px #fff2c11a, 0 16px 45px #120c0a52;
 }
-
-.opening-screen.has-opening-art .opening-screen__visual {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.opening-screen__sun { position: absolute; top: 9%; left: 50%; width: min(28vw, 132px); aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: #fff0a7; box-shadow: 0 0 45px #ffd36e; }
-.opening-screen__hill { position: absolute; left: -12%; right: -12%; bottom: -8%; height: 47%; border-radius: 50% 50% 0 0; transform: rotate(-2deg); }
-.opening-screen__hill--far { bottom: 5%; background: #638459; opacity: .85; }
-.opening-screen__hill--near { background: #234a34; transform: rotate(3deg); }
 .opening-screen__hero { position: relative; z-index: 2; display: block; width: min(78%, 370px); max-height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 14px 16px #130a0866); animation: opening-float 3.2s ease-in-out infinite; }
 .opening-screen.has-visual-fallback .opening-screen__visual::after { content: "🦐"; position: relative; z-index: 2; align-self: center; font-size: clamp(5rem, 27vw, 9rem); filter: drop-shadow(0 12px 16px #130a0866); }
 
