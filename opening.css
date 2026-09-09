@@ -62,7 +62,7 @@ body.is-opening-visible { overflow: hidden; }
   text-align: center;
 }
 
-.opening-screen__header { text-shadow: 0 3px 14px #16100bd9; }
+.opening-screen__header { visibility: hidden; text-shadow: 0 3px 14px #16100bd9; }
 .opening-screen__kicker { margin: 0 0 4px; color: #ffe39b; font-size: .72rem; font-weight: 900; letter-spacing: .22em; text-transform: uppercase; }
 .opening-screen__header h1 { margin: 0; font-size: clamp(1.75rem, 8vw, 3rem); line-height: 1.1; letter-spacing: .03em; }
 .opening-screen__header > p:last-child { margin: 7px 0 0; font-size: clamp(.92rem, 4vw, 1.2rem); font-weight: 800; letter-spacing: .06em; }
