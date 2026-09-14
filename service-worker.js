@@ -2,7 +2,8 @@
 'use strict';
 
 const CACHE_VERSION = 'v3';
-const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}`;
+// 写真保存の更新では音声・キャラクターキャッシュを維持する。
+const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}-photo-save-20260914-3`;
 const CHARACTER_CACHE = `project-ebi-characters-${CACHE_VERSION}`;
 const AUDIO_CACHE = `project-ebi-audio-${CACHE_VERSION}`;
 const CACHE_PREFIX = 'project-ebi-';
@@ -20,6 +21,7 @@ const APP_SHELL = [
   './js/blink.js',
   './js/idle.js',
   './js/photo.js',
+  './js/photo.js?rev=photo-save-ios-share-20260914-3',
   './js/gps.js',
   './js/game.js',
   './js/achievement.js',

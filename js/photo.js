@@ -17,6 +17,7 @@
   var previousFocus = null;
   var flashRoot = null;
   var flashTimer = null;
+  var saveInProgress = false;
 
   function emit(name, detail) {
     if (EbiAR.events) EbiAR.events.emit('photo:' + name, detail);
@@ -55,6 +56,35 @@
     if (typeof global.navigator.canShare !== 'function') return false;
     try { return global.navigator.canShare({ files: [file] }); }
     catch (error) { return false; }
+  }
+
+  function createCurrentFile() {
+    if (!current || typeof global.File !== 'function') throw new TypeError('File API is unavailable.');
+    return new global.File([current.blob], current.metadata.filename, { type: current.blob.type || MIME_TYPE });
+  }
+
+  function fallbackDownload() {
+    if (!current) return false;
+    try {
+      var link = global.document.createElement('a');
+      link.href = current.url;
+      link.rel = 'noopener';
+      if (isIOS()) {
+        // PWAから別画面へ移動せず、生成済みPNGをその場で保存する。
+        setStatus('プレビュー画像を長押しして「写真に保存」または「画像を保存」を選んでください。');
+        emit('save-fallback', { metadata: Object.assign({}, current.metadata), method: 'image-view' });
+        return true;
+      }
+      link.download = current.metadata.filename;
+      global.document.body.appendChild(link); link.click(); link.remove();
+      setStatus('写真の保存を開始しました。');
+      emit('downloaded', { metadata: Object.assign({}, current.metadata), method: 'download' });
+      return true;
+    } catch (error) {
+      setStatus('写真を保存できませんでした。プレビュー画像を長押しして保存してください。', true);
+      emit('error', { action: 'save', stage: 'fallback', error: error });
+      return false;
+    }
   }
 
   function ensureCanvas(width, height) {
@@ -202,6 +232,12 @@
     flashTimer = null; flashRoot = null;
   }
 
+  function handlePagehide(event) {
+    // Safariの履歴キャッシュへの一時退避では、復帰後の保存・再試行にPNGが必要。
+    if (event && event.persisted) return;
+    close();
+  }
+
   /** 写真プレビュー用DOMとライフサイクルリスナーを一度だけ初期化する。 */
   function initialize() {
     if (initialized) return true;
@@ -216,7 +252,7 @@
     modal.addEventListener('click', handleClick);
     global.document.addEventListener('keydown', handleKeydown);
     global.document.addEventListener('visibilitychange', handleVisibility);
-    global.addEventListener('pagehide', close);
+    global.addEventListener('pagehide', handlePagehide);
     initialized = true;
     return true;
   }
@@ -268,7 +304,7 @@
     previewImage.src = current.url;
     modal.hidden = false;
     global.document.body.classList.add('is-photo-preview-open');
-    setStatus(isIOS() ? '共有するか、保存時に表示される画像を長押しして写真へ保存できます。' : '写真は端末内で作成されました。共有または保存を選んでください。');
+    setStatus(isIOS() ? '「保存する」から共有シートを開き、「画像を保存」を選べます。' : '写真は端末内で作成されました。共有または保存を選んでください。');
     var closeButton = modal.querySelector('.photo-preview-close');
     if (closeButton) closeButton.focus();
     emit('preview-open', { metadata: Object.assign({}, current.metadata) });
@@ -277,35 +313,61 @@
 
   /** Web Share APIで画像ファイルをOS共有シートへ渡す。 */
   async function share() {
-    if (!current) return false;
+    if (!current || saveInProgress) return false;
+    var photo = current;
     var file;
-    try { file = new global.File([current.blob], current.metadata.filename, { type: MIME_TYPE }); }
+    try { file = new global.File([photo.blob], photo.metadata.filename, { type: MIME_TYPE }); }
     catch (error) { setStatus('このブラウザは写真ファイルの共有に対応していません。保存するをご利用ください。'); return false; }
     if (!canShareFiles(file)) { setStatus('写真共有に対応していません。保存後にSNSアプリから投稿してください。'); return false; }
+    saveInProgress = true;
     try {
-      await global.navigator.share({ files: [file], title: current.metadata.title, text: current.metadata.text });
-      setStatus('共有先を選択しました。'); emit('shared', { metadata: Object.assign({}, current.metadata) }); return true;
+      await global.navigator.share({ files: [file], title: photo.metadata.title, text: photo.metadata.text });
+      if (current === photo) setStatus('共有先を選択しました。'); emit('shared', { metadata: Object.assign({}, photo.metadata) }); return true;
     } catch (error) {
       if (error && error.name === 'AbortError') return false;
-      setStatus('共有できませんでした。保存するをご利用ください。', true); emit('error', { action: 'share', error: error }); return false;
+      if (current === photo) setStatus('共有できませんでした。保存するをご利用ください。', true); emit('error', { action: 'share', error: error }); return false;
+    } finally {
+      saveInProgress = false;
     }
   }
 
-  /** Blob URLを利用して端末保存を開始する。 */
-  function download() {
-    if (!current) return false;
+  /** 画像File対応環境では共有シートを優先し、非対応環境ではBlob URLから保存する。 */
+  async function download() {
+    if (!current || saveInProgress) return false;
+    var photo = current;
+    var file;
     try {
-      if (isIOS()) {
-        var opened = global.open(current.url, '_blank', 'noopener');
-        setStatus('表示された画像を長押しして「写真に保存」を選んでください。');
-        return !!opened;
+      try { file = createCurrentFile(); }
+      catch (error) {
+        emit('error', { action: 'save', stage: 'file', error: error });
+        return fallbackDownload();
       }
-      var link = global.document.createElement('a');
-      link.href = current.url; link.download = current.metadata.filename; link.rel = 'noopener';
-      global.document.body.appendChild(link); link.click(); link.remove();
-      setStatus('写真の保存を開始しました。'); emit('downloaded', { metadata: Object.assign({}, current.metadata) }); return true;
-    } catch (error) {
-      setStatus('写真を保存できませんでした。共有する、または画像の長押し保存をお試しください。', true); emit('error', { action: 'download', error: error }); return false;
+      if (!canShareFiles(file)) return fallbackDownload();
+      saveInProgress = true;
+      setStatus('共有シートから「画像を保存」を選んでください。');
+      try {
+        await global.navigator.share({ files: [file], title: photo.metadata.title });
+        if (current === photo) setStatus('共有シートで選択した操作を完了しました。');
+        emit('downloaded', { metadata: Object.assign({}, photo.metadata), method: 'share-sheet' });
+        return true;
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          if (current === photo) setStatus('保存操作をキャンセルしました。');
+          return false;
+        }
+        var name = error && error.name || '';
+        var message = name === 'NotAllowedError'
+          ? '保存用の共有シートを開けませんでした。画像を長押しして保存してください。'
+          : (name === 'TypeError' || name === 'DataError'
+            ? 'この端末では画像ファイルを共有できません。画像を長押しして保存してください。'
+            : '共有シートで保存できませんでした。画像を長押しして保存してください。');
+        if (current === photo) setStatus(message, true);
+        emit('error', { action: 'save', stage: 'share', error: error });
+        // share()後はユーザー操作の権限が消費済み。自動で別画面を開かない。
+        return false;
+      }
+    } finally {
+      saveInProgress = false;
     }
   }
 
@@ -334,7 +396,7 @@
     modal.removeEventListener('click', handleClick);
     global.document.removeEventListener('keydown', handleKeydown);
     global.document.removeEventListener('visibilitychange', handleVisibility);
-    global.removeEventListener('pagehide', close);
+    global.removeEventListener('pagehide', handlePagehide);
     global.document.body.classList.remove('is-photo-preview-open');
     modal.remove(); modal = null; previewImage = null; statusElement = null; initialized = false;
   }
