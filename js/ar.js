@@ -38,6 +38,14 @@
     return 'カメラを開始できませんでした。簡易ARモードで遊べます。';
   }
   function character() { return EbiAR.character && EbiAR.character.getById ? EbiAR.character.getById(characterId) : null; }
+  function eventCharacterAllowed(definition) {
+    if (!definition || !definition.eventOnly) return true;
+    var position = EbiAR.gps && EbiAR.gps.getLastPosition();
+    return !!position && EbiAR.character.canAppear(definition, position);
+  }
+  function enforceEventWindow() {
+    if (!eventCharacterAllowed(character())) stop();
+  }
   function byId(id) { return dom && dom.root.querySelector('#' + id); }
 
   /** 全画面ARオーバーレイを必要になった時だけ作成する。 */
@@ -105,7 +113,7 @@
     if (isRunning() || state === STATES.REQUESTING || state === STATES.STARTING || !spot) return null;
     var gameState = EbiAR.game && EbiAR.game.getState ? EbiAR.game.getState() : null;
     var acquired = gameState && gameState.character && gameState.character.discoveredEbi || [];
-    var ids = (spot.characters || spot.spawnCharacterIds || []).filter(function (id) { return acquired.indexOf(id) === -1 && EbiAR.character && EbiAR.character.getById && EbiAR.character.getById(id); });
+    var ids = (spot.characters || spot.spawnCharacterIds || []).filter(function (id) { return acquired.indexOf(id) === -1 && EbiAR.character && EbiAR.character.getById && EbiAR.character.getById(id) && eventCharacterAllowed(EbiAR.character.getById(id)); });
     if (!ids.length) return null;
     var id = ids[Math.floor(Math.random() * ids.length)];
     setCharacter(id); discoverySpotId = spot.id; ensureDom();
@@ -137,8 +145,10 @@
    * @returns {Promise<boolean>}
    */
   async function start(nextCharacterId) {
+    if (!eventCharacterAllowed(nextCharacterId ? EbiAR.character.getById(nextCharacterId) : character())) { enforceEventWindow(); return false; }
     if (nextCharacterId) setCharacter(nextCharacterId);
     if (!character()) { showError('キャラクター情報を読み込めません。'); changeState(STATES.ERROR); return false; }
+    var startingDefinition = character();
     ensureDom();
     dom.discovery.hidden = true;
     if (isRunning()) { renderCharacter(); return true; }
@@ -151,13 +161,16 @@
     try {
       changeState(STATES.STARTING);
       stream = await global.navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+      if (!eventCharacterAllowed(startingDefinition)) { stopTracks(); stop(); return false; }
       dom.video.hidden = false; dom.fallback.hidden = true; dom.video.srcObject = stream;
       await dom.video.play();
+      if (!eventCharacterAllowed(startingDefinition)) { stop(); return false; }
       mode = 'camera'; byId('ar-mode-label').textContent = 'カメラAR'; setMessage('キャラクターを見つけたら、タップしてつかまえよう。');
       changeState(STATES.RUNNING, { mode: mode }); emit('started', { characterId: characterId, mode: mode });
       if (EbiAR.effect) EbiAR.effect.characterAppear(character());
       return true;
     } catch (error) {
+      if (!eventCharacterAllowed(startingDefinition)) { stop(); return false; }
       emit('error', { error: error, message: userMessage(error), fallback: true });
       showError(userMessage(error)); enterFallback(userMessage(error));
       return true;
@@ -225,6 +238,7 @@
   }
   function setCharacter(id) {
     if (!EbiAR.character || !EbiAR.character.getById || !EbiAR.character.getById(id)) return false;
+    if (!eventCharacterAllowed(EbiAR.character.getById(id))) return false;
     if (characterId !== id) discoverySpotId = null;
     characterId = id; if (dom && isRunning()) renderCharacter(); return true;
   }
@@ -285,6 +299,10 @@
     if (gpsConnected || !EbiAR.events) return;
     gpsConnected = true;
     EbiAR.events.on('gps:spot-arrived', function (event) { showDiscovery(event.spot); });
+    EbiAR.events.on('gps:update', enforceEventWindow);
+    EbiAR.events.on('gps:spots-updated', enforceEventWindow);
+    EbiAR.events.on('gps:error', function () { if (character() && character().eventOnly) stop(); });
+    EbiAR.events.on('spots:event-window-changed', enforceEventWindow);
     EbiAR.events.on('ui:start-requested', refreshDiscovery);
     EbiAR.events.on('photo:preview-open', function () { photoPreviewActive = true; });
     EbiAR.events.on('photo:preview-close', function () { photoPreviewActive = false; resumePhotoSession(); });

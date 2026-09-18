@@ -115,7 +115,10 @@
   function normalizeData(data) {
     data = data || {};
     var player = EbiAR.character && EbiAR.character.create ? EbiAR.character.create(data.player || data.character) : clone(data.player || data.character || {});
-    if (!player.coupons.length && Array.isArray(data.coupons)) player.coupons = idList(data.coupons);
+    var sourcePlayer = data.player || data.character || {};
+    if ((!Array.isArray(sourcePlayer.coupons) || !sourcePlayer.coupons.length) && Array.isArray(data.coupons)) {
+      player.coupons = idList(player.coupons.concat(data.coupons));
+    }
     return Object.assign({}, clone(data), {
       player: player,
       game: {
@@ -198,6 +201,7 @@
   function saveGame(overrides) {
     var data = collectGameState();
     if (overrides && typeof overrides === 'object') data = Object.assign(data, clone(overrides));
+    preserveUsedCoupons(data);
     var packed = envelope(data);
     try {
       storage().setItem(STORAGE_KEY, JSON.stringify(packed));
@@ -262,6 +266,7 @@
    */
   function importSave(source) {
     var data = parseEnvelope(source);
+    preserveUsedCoupons(data);
     var packed = envelope(data);
     try { storage().setItem(STORAGE_KEY, JSON.stringify(packed)); }
     catch (error) { throw new SaveError('write_failed', 'セーブデータを取り込めませんでした。', error); }
@@ -304,7 +309,33 @@
     global.addEventListener('beforeunload', autoSave);
   }
 
+  // 使用済み履歴は古いタブの保存や未使用時のバックアップで巻き戻さない。
+  function getUjisatoCouponRecord() {
+    var definition = EbiAR.character && EbiAR.character.ujisatoCoupon;
+    if (!definition) return null;
+    return getCouponRecord(definition.id);
+  }
+  function getCouponRecord(id) {
+    var raw = storage().getItem(STORAGE_KEY);
+    if (!raw) return null;
+    var data = parseEnvelope(raw);
+    return clone(data.player.couponRecords && data.player.couponRecords[id] || null);
+  }
+  function preserveUsedCoupons(data) {
+    var definition = EbiAR.character && EbiAR.character.ujisatoCoupon;
+    if (!definition) return;
+    [definition].concat(EbiAR.character.hamadaCoupons || []).forEach(function (coupon) {
+      var record = getCouponRecord(coupon.id);
+      if (!record || (record.status !== 'used' && !record.usedAt)) return;
+      data.player = data.player || {};
+      data.player.couponRecords = data.player.couponRecords || {};
+      data.player.couponRecords[coupon.id] = record;
+    });
+  }
+
   EbiAR.save = Object.freeze({
+    getUjisatoCouponRecord: getUjisatoCouponRecord,
+    getCouponRecord: getCouponRecord,
     SaveError: SaveError,
     saveGame: saveGame, loadGame: loadGame, autoSave: autoSave, resetSave: resetSave,
     exportSave: exportSave, importSave: importSave, backupSave: backupSave, restoreBackup: restoreBackup,

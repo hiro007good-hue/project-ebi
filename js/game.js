@@ -223,7 +223,44 @@
     emitState();
   }
 
+  // 限定クーポンだけを対象にし、保存が成功してから使用完了を通知する。
+  function useUjisatoCoupon(id) {
+    var definition = EbiAR.character.ujisatoCoupon;
+    return useSingleCoupon(id, definition);
+  }
+  function useHamadaCoupon(id) {
+    var definition = EbiAR.character.hamadaCoupons.find(function (coupon) { return coupon.id === id; });
+    return useSingleCoupon(id, definition);
+  }
+  function useSingleCoupon(id, definition) {
+    var player = state && state.character;
+    if (!definition || id !== definition.id || !player || player.coupons.indexOf(id) < 0) return { ok: false, reason: 'not_owned' };
+    var records = player.couponRecords || (player.couponRecords = {});
+    try {
+      var persisted = EbiAR.save && EbiAR.save.getCouponRecord(id);
+      if (persisted && (persisted.status === 'used' || persisted.usedAt)) records[id] = persisted;
+    } catch (error) { return { ok: false, reason: 'save_failed' }; }
+    var previous = records[id];
+    if (previous && (previous.status === 'used' || previous.usedAt)) return { ok: false, reason: 'already_used' };
+    if (definition.expiresAt && Date.now() >= Date.parse(definition.expiresAt)) return { ok: false, reason: 'expired' };
+    var usedAt = new Date().toISOString();
+    records[id] = { status: 'used', acquiredAt: previous && previous.acquiredAt || null, usedAt: usedAt };
+    try {
+      if (!EbiAR.save || typeof EbiAR.save.saveGame !== 'function') throw new Error('Save unavailable');
+      EbiAR.save.saveGame();
+    } catch (error) {
+      if (previous) records[id] = previous;
+      else delete records[id];
+      return { ok: false, reason: 'save_failed' };
+    }
+    emitState();
+    EbiAR.events.emit('coupon:used', { id: id, usedAt: usedAt });
+    return { ok: true, usedAt: usedAt };
+  }
+
   EbiAR.game = Object.freeze({
+    useUjisatoCoupon: useUjisatoCoupon,
+    useHamadaCoupon: useHamadaCoupon,
     initialize: initialize,
     startGps: EbiAR.gps.start,
     stopGps: EbiAR.gps.stop,

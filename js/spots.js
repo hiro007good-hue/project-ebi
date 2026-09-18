@@ -136,8 +136,9 @@
   function findNearby(position, options) {
     options = options || {};
     return list(options).map(function (spot) {
-      spot.distanceMeters = Math.round(distanceMeters(position, spot));
-      spot.isNearby = spot.distanceMeters <= spot.radiusMeters;
+      var distance = distanceMeters(position, spot);
+      spot.distanceMeters = Math.round(distance);
+      spot.isNearby = spot.eventOnly ? distance <= spot.radiusMeters : spot.distanceMeters <= spot.radiusMeters;
       return spot;
     }).filter(function (spot) { return options.includeOutside || spot.isNearby; }).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; });
   }
@@ -169,6 +170,34 @@
     if (EbiAR.events) EbiAR.events.emit('spots:event-unregistered', { id: id });
     return true;
   }
+
+  var ujisatoEvent = registerEvent({
+    id: 'ujisato-festival-2026', name: '日野町役場',
+    latitude: 35.01804530121088, longitude: 136.24599685906034,
+    radiusMeters: 100, category: 'history', isPublished: true,
+    description: '2026年9月26日限定・氏郷祭りの氏郷えび出現スポット。',
+    guide: '周囲の通行を妨げない場所で、立ち止まって楽しもう。',
+    spawnCharacterIds: ['ujisato-ebi'],
+    startsAt: '2026-09-26T00:00:00+09:00', endsAt: '2026-09-26T23:59:59.999+09:00'
+  });
+  // 移動がなくても開催開始・終了を反映する。端末のタイムゾーンには依存しない。
+  function refreshEventWindow() {
+    if (EbiAR.gps) EbiAR.gps.refreshSpots();
+    EbiAR.events.emit('spots:event-window-changed', { id: ujisatoEvent.id });
+  }
+  function scheduleBoundary(time) {
+    var delay = time - Date.now();
+    if (delay <= 0) return;
+    global.setTimeout(function () {
+      if (Date.now() < time) scheduleBoundary(time);
+      else refreshEventWindow();
+    }, Math.min(delay, 2147483647));
+  }
+  scheduleBoundary(Date.parse(ujisatoEvent.startsAt));
+  scheduleBoundary(Date.parse(ujisatoEvent.endsAt) + 1);
+  if (global.document) global.document.addEventListener('visibilitychange', function () {
+    if (!global.document.hidden) refreshEventWindow();
+  });
 
   EbiAR.spots = Object.freeze({
     categories: Object.freeze(['store', 'gourmet', 'shrine', 'temple', 'history', 'tourism', 'nature', 'museum', 'water']),

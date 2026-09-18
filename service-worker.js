@@ -2,8 +2,8 @@
 'use strict';
 
 const CACHE_VERSION = 'v3';
-// 写真保存の更新では音声・キャラクターキャッシュを維持する。
-const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}-photo-save-20260914-3`;
+// ごほうび更新では音声・キャラクターキャッシュを維持する。
+const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}-hamada-rewards-20260917`;
 const CHARACTER_CACHE = `project-ebi-characters-${CACHE_VERSION}`;
 const AUDIO_CACHE = `project-ebi-audio-${CACHE_VERSION}`;
 const CACHE_PREFIX = 'project-ebi-';
@@ -17,25 +17,32 @@ const APP_SHELL = [
   OFFLINE_URL,
   './js/config.js',
   './js/spots.js',
+  './js/spots.js?rev=hamada-rewards-20260917',
   './js/character.js',
+  './js/character.js?rev=hamada-rewards-20260917',
   './js/blink.js',
   './js/idle.js',
   './js/photo.js',
   './js/photo.js?rev=photo-save-ios-share-20260914-3',
   './js/gps.js',
+  './js/gps.js?rev=hamada-rewards-20260917',
   './js/game.js',
+  './js/game.js?rev=hamada-rewards-20260917',
   './js/achievement.js',
   './js/quest.js',
   './js/story.js',
   './js/ending.js',
   './js/save.js',
+  './js/save.js?rev=hamada-rewards-20260917',
   './js/sound.js',
   './js/sound.js?rev=opening-future-2-production',
   './js/effect.js',
   './js/ui.js',
+  './js/ui.js?rev=hamada-rewards-20260917',
   './js/opening.js',
   './js/opening.js?rev=opening-future-2-production',
   './js/ar.js',
+  './js/ar.js?rev=hamada-rewards-20260917',
   './js/pwa.js',
   './images/icons/icon-192.png',
   './images/icons/icon-512.png',

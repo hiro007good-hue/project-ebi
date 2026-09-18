@@ -8,6 +8,29 @@
   var MAX_LEVEL = EbiAR.config.gameplay.maxLevel;
   var CHARACTER_MAX_LEVEL = 10;
   var DEFAULT_NAME = 'エビフライ見習い';
+  var UJISATO_COUPON = Object.freeze({
+    id: 'ujisato-20260926-dinein-100', name: '氏郷祭り限定クーポン',
+    description: '2,000円以上の店内飲食で100円引き（1回限り）', source: '氏郷えび捕獲特典',
+    expiresAt: '2026-11-01T00:00:00+09:00', expiryLabel: '2026年10月31日 23:59まで（日本時間）'
+  });
+  var HAMADA_COUPONS = Object.freeze([
+    { id: 'hamada-collection-15-ebi', name: '海老フライ1本無料', target: 15, group: 'all', source: 'キャラクター15種類GET' },
+    { id: 'hamada-regular-21-matcha', name: '抹茶＋茶菓子セット無料', target: 21, group: 'regular', source: '氏郷えびを除く通常21種類をすべてGET' },
+    { id: 'hamada-all-22-teishoku', name: '海老フライ定食1食無料', target: 22, group: 'all', source: '氏郷えびを含む全22種類GET' }
+  ].map(function (item) { return Object.freeze(Object.assign({}, item, { description: 'はま田で定食をご注文のお客様限定。1回限り。' })); }));
+  function normalizeCouponRecords(records) {
+    var result = {};
+    [UJISATO_COUPON].concat(HAMADA_COUPONS).forEach(function (definition) {
+      var record = records && records[definition.id];
+      if (!record || typeof record !== 'object') return;
+      result[definition.id] = {
+        status: record.status === 'used' || record.usedAt ? 'used' : 'available',
+        acquiredAt: typeof record.acquiredAt === 'string' ? record.acquiredAt : null,
+        usedAt: typeof record.usedAt === 'string' ? record.usedAt : null
+      };
+    });
+    return result;
+  }
   var RARITIES = Object.freeze({
     common:    { key: 'common',    name: 'ノーマル',  rank: 1, color: '#7b8a8b', spawnWeight: 55 },
     uncommon:  { key: 'uncommon',  name: 'レア',      rank: 2, color: '#3c9d67', spawnWeight: 25 },
@@ -91,10 +114,38 @@
     definition('hino-gold', '黄金えび', 'epic', AREA_IDS.west, '夕日に照らされる田園で輝く、幸運の海老フライ。', 70),
     definition('king-furai', 'フライ王', 'legendary', AREA_IDS.foothill, '王国を治める伝説の海老フライ。礼儀正しい冒険者を待っている。', 120),
     definition('queen-tartar', 'タルタル女王', 'legendary', AREA_IDS.east, '日野町の旅を見守る王国の女王。出会えたら大きな幸運。', 120),
-    definition('watamuki-ebi', 'わたむきえび', 'rare', AREA_IDS.watamuki, '村社綿向神社を守る神聖な海老キャラクター。', 40)
+    definition('watamuki-ebi', 'わたむきえび', 'rare', AREA_IDS.watamuki, '村社綿向神社を守る神聖な海老キャラクター。', 40),
+    Object.freeze(Object.assign({}, definition('ujisato-ebi', '氏郷えび', 'rare', 'ujisato-festival-2026', '2026年9月26日、日野町役場の氏郷祭りに登場する限定えび。', 40), {
+      eventOnly: true, image: 'images/characters/castle-crisp.webp',
+      model: null, arModel: null, sound: ''
+    }))
   ]);
   var byId = {};
   CHARACTERS.forEach(function (item) { byId[item.id] = item; });
+  // この制度の対象を固定し、将来キャラが増えても21/22種類の条件を変えない。
+  var HAMADA_REGULAR_IDS = Object.freeze([
+    'ebi-maru', 'cabbage-kun', 'lemon-pyon', 'tart-chan', 'koromo-pon',
+    'hino-bito', 'machi-akari', 'kaze-ebi', 'midori-furai', 'kawa-taruto',
+    'shonin-ebi', 'rail-furai', 'yamamori', 'mizube-queen', 'festival-ebi',
+    'castle-crisp', 'satoyama-knight', 'hino-gold', 'king-furai', 'queen-tartar', 'watamuki-ebi'
+  ]);
+  var HAMADA_ALL_IDS = Object.freeze(HAMADA_REGULAR_IDS.concat(['ujisato-ebi']));
+  function hamadaProgress(character) {
+    var ids = character && character.discoveredEbi || [];
+    return { total: 22, acquired: HAMADA_ALL_IDS.filter(function (id) { return ids.indexOf(id) >= 0; }).length,
+      regular: HAMADA_REGULAR_IDS.filter(function (id) { return ids.indexOf(id) >= 0; }).length };
+  }
+  function grantHamadaCoupons(character) {
+    var progress = hamadaProgress(character), granted = [];
+    HAMADA_COUPONS.forEach(function (coupon) {
+      if ((coupon.group === 'regular' ? progress.regular : progress.acquired) < coupon.target) return;
+      if (character.coupons.indexOf(coupon.id) >= 0) return;
+      character.coupons.push(coupon.id);
+      character.couponRecords[coupon.id] = character.couponRecords[coupon.id] || { status: 'available', acquiredAt: now(), usedAt: null };
+      granted.push(coupon.id);
+    });
+    return granted;
+  }
 
   function isSafeId(value) { return typeof value === 'string' && /^[a-z0-9_-]{1,64}$/i.test(value); }
   function uniqueCharacterIds(value) {
@@ -132,18 +183,21 @@
   function create(initial) {
     initial = initial || {};
     var discovered = uniqueCharacterIds(initial.discoveredEbi);
-    return {
+    var player = {
       name: sanitizeName(initial.name), level: Math.max(1, Math.min(MAX_LEVEL, Number(initial.level) || 1)),
       experience: Math.max(0, Math.floor(Number(initial.experience) || 0)),
       points: Math.max(0, Math.floor(Number(initial.points) || 0)),
       coins: Math.max(0, Math.floor(Number(initial.coins) || EbiAR.config.gameplay.startingCoins)),
       title: typeof initial.title === 'string' ? initial.title.slice(0, 32) : '日野町の旅人',
       coupons: Array.isArray(initial.coupons) ? initial.coupons.filter(isSafeId) : [],
+      couponRecords: normalizeCouponRecords(initial.couponRecords),
       titles: Array.isArray(initial.titles) ? initial.titles.map(function (title) { return String(title).slice(0, 32); }).filter(Boolean) : [],
       discoveredEbi: discovered, characterRecords: normalizeRecords(initial.characterRecords, discovered),
       visitedSpots: Array.isArray(initial.visitedSpots) ? initial.visitedSpots.filter(isSafeId) : [],
       createdAt: initial.createdAt || now(), updatedAt: now()
     };
+    grantHamadaCoupons(player);
+    return player;
   }
   function touch(character) { character.updatedAt = now(); EbiAR.events.emit('character:updated', character); }
   function grantExperience(character, amount) {
@@ -176,6 +230,7 @@
   }
   function canAppear(definition, position) {
     if (!definition || !position || !Number.isFinite(Number(position.latitude)) || !Number.isFinite(Number(position.longitude))) return false;
+    if (definition.eventOnly && (!EbiAR.gps || EbiAR.gps.statusFor(position) !== 'ready')) return false;
     return resolveAppearanceSpots(definition).some(function (spot) {
       if (EbiAR.spots && typeof EbiAR.spots.isWithin === 'function') return EbiAR.spots.isWithin(spot, position);
       return distanceMeters(position, spot) <= spot.radiusMeters;
@@ -204,6 +259,7 @@
     options = options || {};
     var rarity = options.rarity;
     return CHARACTERS.filter(function (item) { return (!rarity || item.rarity === rarity) && matches(item, options.query); })
+      .filter(function (item) { return !item.eventOnly || canAppear(item, options.position); })
       .filter(function (item) { return options.unacquiredOnly !== true || !character || character.discoveredEbi.indexOf(item.id) < 0; })
       .map(function (item) { return catalogEntry(item, character, options.position); });
   }
@@ -226,9 +282,20 @@
     character.discoveredEbi.push(id);
     character.characterRecords = character.characterRecords || {};
     character.characterRecords[id] = normalizeRecord();
+    // 出現イベントと販促券の期間は別。将来の再出現でこの券は発行しない。
+    var couponDay = Date.now() >= Date.parse('2026-09-26T00:00:00+09:00') && Date.now() < Date.parse('2026-09-27T00:00:00+09:00');
+    var couponGranted = id === 'ujisato-ebi' && couponDay && character.coupons.indexOf(UJISATO_COUPON.id) < 0;
+    if (couponGranted) {
+      character.coupons.push(UJISATO_COUPON.id);
+      character.couponRecords = character.couponRecords || {};
+      character.couponRecords[UJISATO_COUPON.id] = character.couponRecords[UJISATO_COUPON.id] || { status: 'available', acquiredAt: now(), usedAt: null };
+    }
+    var hamadaGranted = grantHamadaCoupons(character);
     var pointResult = grantCharacterPoints(character, id, definition.acquisitionPoints);
     var result = { ok: true, character: catalogEntry(definition, character, position), pointsAwarded: definition.acquisitionPoints, levelsGained: pointResult.levelsGained };
     EbiAR.events.emit('character:acquired', result);
+    if (couponGranted) EbiAR.events.emit('coupon:acquired', { id: UJISATO_COUPON.id });
+    hamadaGranted.forEach(function (couponId) { EbiAR.events.emit('coupon:acquired', { id: couponId }); });
     return result;
   }
   function grantCharacterPoints(character, id, amount) {
@@ -241,11 +308,15 @@
     return { ok: true, record: Object.assign({}, record), levelsGained: levelsGained };
   }
   function collectionStats(character) {
-    var acquired = character && Array.isArray(character.discoveredEbi) ? uniqueCharacterIds(character.discoveredEbi).length : 0;
-    return { total: CHARACTERS.length, acquired: acquired, unacquired: CHARACTERS.length - acquired, completionRate: Number((acquired / CHARACTERS.length * 100).toFixed(1)), isComplete: acquired === CHARACTERS.length };
+    // 期間限定キャラは通常図鑑のコンプリート条件へ加えない。
+    var regular = CHARACTERS.filter(function (item) { return !item.eventOnly; });
+    var acquired = regular.filter(function (item) { return character && Array.isArray(character.discoveredEbi) && character.discoveredEbi.indexOf(item.id) >= 0; }).length;
+    return { total: regular.length, acquired: acquired, unacquired: regular.length - acquired, completionRate: Number((acquired / regular.length * 100).toFixed(1)), isComplete: acquired === regular.length };
   }
 
   EbiAR.character = Object.freeze({
+    ujisatoCoupon: UJISATO_COUPON,
+    hamadaCoupons: HAMADA_COUPONS, hamadaProgress: hamadaProgress,
     rarities: RARITIES, areas: AREA_IDS, catalog: CHARACTERS,
     create: create, sanitizeName: sanitizeName, requiredExperience: requiredExperience, grantExperience: grantExperience,
     requiredCharacterPoints: requiredCharacterPoints, getById: function (id) { return byId[id] || null; },

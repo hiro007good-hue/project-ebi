@@ -117,7 +117,11 @@
     var accuracyThreshold = lastPosition ? Math.max(5, lastPosition.accuracy * 0.1) : 0;
     var accuracyImproved = !lastPosition || accuracyImprovement >= accuracyThreshold;
     var statusChanged = previousStatus !== status;
-    if (!moved && !accuracyImproved && !statusChanged) return;
+    // 期間限定スポットの半径をまたいだ時は、通常の5m更新間隔より優先する。
+    var eventBoundaryChanged = lastPosition && EbiAR.spots && EbiAR.spots.list({ eventOnly: true }).some(function (spot) {
+      return EbiAR.spots.isWithin(spot, lastPosition) !== EbiAR.spots.isWithin(spot, point);
+    });
+    if (!moved && !accuracyImproved && !statusChanged && !eventBoundaryChanged) return;
     lastPosition = point;
     EbiAR.events.emit('gps:update', { position: point, status: status });
     updateSpotState(point, status);

@@ -74,7 +74,7 @@
   function createGame() {
     var el = screen('screen-game');
     var hud = document.createElement('header'); hud.className = 'hud';
-    [['ポイント','hud-points'], ['レベル','hud-level'], ['現在地','hud-location']].forEach(function (item) { var stat = document.createElement('div'); stat.className = 'stat'; stat.append(text(item[0]), Object.assign(document.createElement('strong'), { id: item[1], textContent: '-' })); hud.appendChild(stat); });
+    [['GETしたキャラ','hud-collection'], ['ゲーム内pt','hud-points'], ['レベル','hud-level'], ['現在地','hud-location']].forEach(function (item) { var stat = document.createElement('div'); stat.className = 'stat'; stat.append(text(item[0]), Object.assign(document.createElement('strong'), { id: item[1], textContent: '-' })); hud.appendChild(stat); });
     var title = document.createElement('h2'); title.textContent = '日野町を冒険中'; var spot = document.createElement('article'); spot.id = 'spot-panel'; spot.className = 'panel'; spot.append(Object.assign(document.createElement('h3'), { id: 'spot-name', textContent: '現在地を取得しています' }), Object.assign(document.createElement('p'), { id: 'spot-description', textContent: 'GPSを許可すると近くのスポットが表示されます。' }), Object.assign(document.createElement('p'), { id: 'spot-guide', textContent: '' }));
     var actions = document.createElement('nav'); actions.className = 'actions'; [['図鑑','catalog'], ['クエスト','quest'], ['実績','achievement'], ['クーポン','coupons'], ['設定','settings'], ['タイトルへ','title']].forEach(function (item) { actions.appendChild(button(item[0], item[1], item[1] === 'title' ? 'secondary' : '')); }); el.append(hud, title, spot, actions); return el;
   }
@@ -111,7 +111,7 @@
   function createAchievement() { var el = screen('screen-achievement'); el.append(button('← 戻る', 'game', 'back')); var content = document.createElement('div'); content.id = 'achievement-root'; el.append(content); return el; }
   function createCoupons() {
     var el = screen('screen-coupons'); el.append(button('← 戻る', 'game', 'back'));
-    var heading = document.createElement('h2'); heading.textContent = 'クーポン';
+    var heading = document.createElement('h2'); heading.textContent = 'はま田ごほうび・クーポン';
     var collection = document.createElement('section'); collection.id = 'coupon-collection-progress'; collection.className = 'collection-progress'; collection.setAttribute('aria-labelledby', 'coupon-collection-title');
     var summary = document.createElement('div'); summary.className = 'coupon-summary';
     summary.append(Object.assign(document.createElement('p'), { textContent: '獲得した限定クーポン' }), Object.assign(document.createElement('strong'), { id: 'coupon-count', textContent: '0枚' }));
@@ -163,6 +163,7 @@
     if (!state) return;
     var player = state.character || state.player || {};
     setText('hud-points', safeNumber(player.points).toLocaleString());
+    setText('hud-collection', EbiAR.character.hamadaProgress(player).acquired + ' / 22種類');
     setText('hud-level', 'Lv.' + (safeNumber(player.level) || 1));
   }
   function updateLocation(update) {
@@ -348,6 +349,37 @@
   /** クーポン画面へ捕獲進捗と既存の5体収集報酬を表示する。 */
   function renderCollectionProgress() {
     var target = byId('coupon-collection-progress'); if (!target) return;
+    renderHamadaProgress(target);
+  }
+
+  function renderHamadaProgress(target) {
+    var stats = EbiAR.character.hamadaProgress(characterState());
+    var heading = Object.assign(document.createElement('h3'), { id: 'coupon-collection-title', textContent: '集めよう！はま田ごほうび' });
+    var count = Object.assign(document.createElement('strong'), { textContent: '現在 ' + stats.acquired + ' / 22種類' });
+    var nextText = stats.acquired < 15 ? 'あと' + (15 - stats.acquired) + '種類で 海老フライ1本無料！'
+      : stats.regular < 21 ? '通常キャラ あと' + (21 - stats.regular) + '種類で 抹茶＋茶菓子セット無料！'
+        : stats.acquired < 22 ? '氏郷えびもGETして 海老フライ定食1食無料！' : '全22種類GET！コンプリートおめでとう！';
+    var next = Object.assign(document.createElement('p'), { className: 'collection-next', textContent: nextText });
+    var list = document.createElement('div'); list.className = 'collection-rewards';
+    EbiAR.character.hamadaCoupons.forEach(function (coupon) {
+      var achieved = (coupon.group === 'regular' ? stats.regular : stats.acquired) >= coupon.target;
+      var row = document.createElement('p'); row.className = 'collection-reward';
+      row.textContent = (achieved ? '✅ ' : '') + coupon.source + ' → ' + coupon.name;
+      list.appendChild(row);
+    });
+    var terms = Object.assign(document.createElement('p'), { textContent: '3特典とも、はま田で定食をご注文のお客様限定。各クーポンは1回限りです。' });
+    var special = Object.assign(document.createElement('p'), { textContent: '氏郷えびは特別な日にだけ出現！' });
+    var keep = Object.assign(document.createElement('p'), { textContent: 'クーポンを使っても、集めたキャラクターはなくなりません。次のごほうびを目指そう！' });
+    var legacy = document.createElement('details');
+    legacy.appendChild(Object.assign(document.createElement('summary'), { textContent: 'ゲーム内の育成・クエスト・実績（はま田ごほうびとは別）' }));
+    legacy.appendChild(Object.assign(document.createElement('p'), { textContent: '育成pt・経験値・クエスト・実績はこれまで通りです。各画面で報酬を受け取れます。' }));
+    var oldProgress = document.createElement('div');
+    renderLegacyCollectionProgress(oldProgress);
+    legacy.appendChild(oldProgress);
+    target.replaceChildren(heading, count, next, list, terms, special, keep, legacy);
+  }
+
+  function renderLegacyCollectionProgress(target) {
     var stats = getCollectionProgress();
     var firstTarget = 5;
     var nextText = stats.total === 0
@@ -357,7 +389,7 @@
         : stats.acquired < stats.total
           ? '✅ 5体収集 達成済み（コンプリートまであと' + (stats.total - stats.acquired) + '体）'
           : '🎉 正式収集対象をコンプリートしました！';
-    var title = Object.assign(document.createElement('h3'), { id: 'coupon-collection-title', textContent: 'キャラクター収集進捗' });
+    var title = Object.assign(document.createElement('h3'), { textContent: 'ゲーム内の収集報酬' });
     var head = document.createElement('div'); head.className = 'collection-progress-head';
     var labels = document.createElement('div');
     labels.append(Object.assign(document.createElement('p'), { textContent: '現在の捕獲数' }), Object.assign(document.createElement('p'), { className: 'collection-total', textContent: '正式収集対象：' + stats.total + '体' }));
@@ -383,6 +415,10 @@
   function normalizeCoupon(coupon) {
     var id = typeof coupon === 'string' ? coupon : (coupon && typeof coupon.id === 'string' ? coupon.id : '');
     if (!id || id.length > 128) return null;
+    var eventCoupon = EbiAR.character && EbiAR.character.ujisatoCoupon;
+    if (eventCoupon && id === eventCoupon.id) return Object.assign({}, eventCoupon);
+    var hamada = EbiAR.character.hamadaCoupons.find(function (item) { return item.id === id; });
+    if (hamada) return Object.assign({}, hamada);
     var definition = COUPON_DEFINITIONS[id] || {};
     var suppliedName = coupon && typeof coupon.name === 'string' ? coupon.name.trim().slice(0, 80) : '';
     if (suppliedName === id || /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(suppliedName)) suppliedName = '';
@@ -396,6 +432,7 @@
 
   function renderCoupons(coupons) {
     var target = byId('coupon-list'); if (!target) return;
+    global.clearTimeout(timers.couponExpiry);
     renderCollectionProgress();
     var values = Array.isArray(coupons) ? coupons : getSavedCoupons();
     var seen = new Set();
@@ -407,15 +444,68 @@
     setText('coupon-count', items.length.toLocaleString() + '枚');
     if (!items.length) {
       var empty = document.createElement('p'); empty.className = 'coupon-empty';
-      empty.append(Object.assign(document.createElement('strong'), { textContent: 'クーポンはまだありません' }), document.createElement('br'), text('クエストや実績を達成すると獲得できます。'));
+      empty.append(Object.assign(document.createElement('strong'), { textContent: 'クーポンはまだありません' }), document.createElement('br'), text('まずは15種類GETを目指そう！'));
       target.appendChild(empty); return;
     }
+    function couponGroup(coupon) {
+      return EbiAR.character.hamadaCoupons.some(function (item) { return item.id === coupon.id; }) ? 0
+        : coupon.id === EbiAR.character.ujisatoCoupon.id ? 1 : 2;
+    }
+    items.sort(function (a, b) { return couponGroup(a) - couponGroup(b); });
+    var lastGroup = -1;
     items.forEach(function (coupon) {
+      var group = couponGroup(coupon);
+      if (group !== lastGroup) {
+        target.appendChild(Object.assign(document.createElement('h3'), { textContent: ['はま田ごほうび', '氏郷祭り限定特典', 'ゲーム内のクエスト・実績クーポン'][group] }));
+        lastGroup = group;
+      }
       var card = document.createElement('article'); card.className = 'coupon-card';
       var heading = document.createElement('h3'); heading.textContent = coupon.name;
       var description = document.createElement('p'); description.textContent = coupon.description;
       var source = document.createElement('p'); source.className = 'coupon-source'; source.textContent = '取得元：' + coupon.source;
       card.append(heading, description, source); target.appendChild(card);
+      var eventCoupon = EbiAR.character && EbiAR.character.ujisatoCoupon;
+      var hamadaCoupon = EbiAR.character.hamadaCoupons.find(function (item) { return item.id === coupon.id; });
+      if (hamadaCoupon || (eventCoupon && coupon.id === eventCoupon.id)) {
+        var redeemable = hamadaCoupon || eventCoupon;
+        var player = characterState();
+        var record = player && player.couponRecords && player.couponRecords[coupon.id];
+        try {
+          var persisted = EbiAR.save && EbiAR.save.getCouponRecord(coupon.id);
+          if (persisted && (persisted.status === 'used' || persisted.usedAt)) record = persisted;
+        } catch (error) { /* 使用時にも保存状態を検証し、読取失敗なら使用不可にする。 */ }
+        var used = !!record && (record.status === 'used' || !!record.usedAt);
+        var expired = !!redeemable.expiresAt && Date.now() >= Date.parse(redeemable.expiresAt);
+        var status = document.createElement('p');
+        status.textContent = used ? '使用済み' : expired ? '期限切れ' : '未使用・1回限り';
+        if (used && record.usedAt && Number.isFinite(Date.parse(record.usedAt))) status.textContent += '：' + new Date(record.usedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + '（日本時間）';
+        var use = document.createElement('button'); use.type = 'button';
+        use.textContent = used ? '使用済み' : expired ? '期限切れ' : '使用する'; use.disabled = used || expired;
+        var expiry = document.createElement('p'); expiry.textContent = redeemable.expiryLabel ? '有効期限：' + redeemable.expiryLabel : '';
+        if (redeemable.expiresAt && !expired) timers.couponExpiry = global.setTimeout(function () {
+          if (currentScreen === 'coupons') renderCoupons();
+        }, Math.min(Date.parse(redeemable.expiresAt) - Date.now(), 2147483647));
+        var confirmation = document.createElement('div'); confirmation.hidden = true;
+        confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'クーポン使用の確認');
+        var warning = document.createElement('p'); warning.textContent = '店員さんの前で押してください。確定すると再使用できません。';
+        var cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'キャンセル';
+        var confirmUse = document.createElement('button'); confirmUse.type = 'button'; confirmUse.textContent = '使用を確定する';
+        confirmation.append(warning, cancel, confirmUse);
+        use.addEventListener('click', function () {
+          use.disabled = true;
+          confirmation.hidden = false; cancel.focus();
+        });
+        cancel.addEventListener('click', function () { confirmation.hidden = true; use.disabled = false; use.focus(); });
+        confirmUse.addEventListener('click', function () {
+          confirmUse.disabled = true;
+          var result = hamadaCoupon ? EbiAR.game.useHamadaCoupon(coupon.id) : EbiAR.game.useUjisatoCoupon(coupon.id);
+          if (!result.ok) showMessage(result.reason === 'save_failed' ? '保存状態を確認できませんでした。使用は確定していません。' : result.reason === 'expired' ? 'このクーポンは期限切れです。' : 'このクーポンは使用できません。');
+          else showMessage('クーポンを使用しました。');
+          renderCoupons();
+        });
+        if (redeemable.expiryLabel) card.appendChild(expiry);
+        card.append(status, use, confirmation);
+      }
     });
   }
 
@@ -519,7 +609,7 @@
       root.removeEventListener('input', handleInput);
       root.replaceChildren();
     }
-    global.clearTimeout(timers.message); timers = {}; lastFocusedElement = null; currentScreen = 'loading'; root = null;
+    global.clearTimeout(timers.message); global.clearTimeout(timers.couponExpiry); timers = {}; lastFocusedElement = null; currentScreen = 'loading'; root = null;
   }
 
   EbiAR.ui = Object.freeze({ init: init, destroy: destroy, showScreen: showScreen, fadeIn: fadeIn, fadeOut: fadeOut, setLoading: setLoading, showMessage: showMessage, updateHud: updateHud, updateLocation: updateLocation, renderSpot: renderSpot, renderCatalog: renderCatalog, renderCharacterDetail: renderCharacterDetail, closeCharacterDetail: closeCharacterDetail, renderCoupons: renderCoupons, getCurrentScreen: function () { return currentScreen; }, getCurrentCharacterId: function () { return currentCharacterId; } });
