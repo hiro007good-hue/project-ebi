@@ -198,7 +198,7 @@ Opening画像`images/opening/opening-adventure.webp`はProject EBIオリジナ�
 
 | スポット | 推奨配置パス | 仕様 | 優先度 | 状態 |
 |---|---|---|---|---|
-| えびふらいと抹茶専門店 はま田 | `images/spots/hamada.webp` | 1600×900 WebP | B | 未配置 |
+| えびふらい抹茶専門店　はま田 | `images/spots/hamada.webp` | 1600×900 WebP | B | 未配置 |
 | 馬見岡綿向神社 | `images/spots/umamioka-watamuki-shrine.webp` | 1600×900 WebP | B | 未配置 |
 | 近江日野商人館 | `images/spots/omi-hino-merchant-museum.webp` | 1600×900 WebP | B | 未配置 |
 | 日野まちかど感応館 | `images/spots/hino-machikado-kanno.webp` | 1600×900 WebP | B | 未配置 |
