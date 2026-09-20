@@ -11,11 +11,6 @@
   var lastFocusedElement = null;
   var unsubscribe = [];
   var failedCharacterImages = new Set();
-  var COUPON_DEFINITIONS = Object.freeze({
-    'collection-5': Object.freeze({ name: '図鑑コレクタークーポン', source: 'クエスト「図鑑を5種類集めよう」' }),
-    'achievement-collection-5': Object.freeze({ name: '図鑑5種類 達成クーポン', source: '実績「図鑑5種類」' }),
-    'achievement-1000-points': Object.freeze({ name: '1000ポイント達成クーポン', source: '実績「1000ポイント達成」' })
-  });
   var settings = { bgmEnabled: true, seEnabled: true, bgmVolume: 0.6, seVolume: 0.8, vibration: true, highContrast: false };
   var timers = {};
 
@@ -367,7 +362,7 @@
       row.textContent = (achieved ? '✅ ' : '') + coupon.source + ' → ' + coupon.name;
       list.appendChild(row);
     });
-    var terms = Object.assign(document.createElement('p'), { textContent: '3特典とも、はま田で定食をご注文のお客様限定。各クーポンは1回限りです。' });
+    var terms = Object.assign(document.createElement('p'), { textContent: '3特典とも、えびふらい抹茶専門店　はま田で定食をご注文のお客様限定。各クーポンは1回限りです。' });
     var special = Object.assign(document.createElement('p'), { textContent: '氏郷えびは特別な日にだけ出現！' });
     var keep = Object.assign(document.createElement('p'), { textContent: 'クーポンを使っても、集めたキャラクターはなくなりません。次のごほうびを目指そう！' });
     var legacy = document.createElement('details');
@@ -400,8 +395,8 @@
     var achievementStatus = getCollectionRewardStatus(EbiAR.Achievement, ['unlocked', 'claimed'], stats.acquired);
     var questStatus = getCollectionRewardStatus(EbiAR.Quest, ['completed', 'claimed'], stats.acquired);
     [
-      ['【5体収集 実績】', '500pt・経験値 +250・コイン +50・限定クーポン', achievementStatus],
-      ['【5体収集 クエスト】', '500pt・経験値 +250・コイン +50・クーポン', questStatus]
+      ['【5体収集 実績】', '500pt・経験値 +250・コイン +50', achievementStatus],
+      ['【5体収集 クエスト】', '500pt・経験値 +250・コイン +50', questStatus]
     ].forEach(function (reward) {
       var row = document.createElement('div'); row.className = 'collection-reward';
       var rewardStatusText = reward[2].completed ? '✅ 達成済み' : reward[2].remaining > 0 ? '未達成（あと' + reward[2].remaining + '体）' : '未達成（進行条件を確認中）';
@@ -418,16 +413,9 @@
     var eventCoupon = EbiAR.character && EbiAR.character.ujisatoCoupon;
     if (eventCoupon && id === eventCoupon.id) return Object.assign({}, eventCoupon);
     var hamada = EbiAR.character.hamadaCoupons.find(function (item) { return item.id === id; });
-    if (hamada) return Object.assign({}, hamada);
-    var definition = COUPON_DEFINITIONS[id] || {};
-    var suppliedName = coupon && typeof coupon.name === 'string' ? coupon.name.trim().slice(0, 80) : '';
-    if (suppliedName === id || /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(suppliedName)) suppliedName = '';
-    return {
-      id: id,
-      name: definition.name || suppliedName || '獲得済みクーポン',
-      description: coupon && typeof coupon.description === 'string' && coupon.description.trim() ? coupon.description.trim().slice(0, 160) : '獲得済みの特典クーポンです。',
-      source: coupon && typeof coupon.source === 'string' && coupon.source.trim() ? coupon.source.trim().slice(0, 100) : (definition.source || 'ゲーム内報酬')
-    };
+    if (hamada) return Object.assign({}, hamada, { description: 'えびふらい抹茶専門店　はま田で定食をご注文のお客様限定。1回限り。' });
+    // 店頭券だけを表示する。旧報酬のID・発行・Saveは保持する。
+    return null;
   }
 
   function renderCoupons(coupons) {

@@ -3,7 +3,7 @@
 
 const CACHE_VERSION = 'v3';
 // ごほうび更新では音声・キャラクターキャッシュを維持する。
-const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}-hamada-rewards-20260917`;
+const SHELL_CACHE = `project-ebi-shell-${CACHE_VERSION}-store-coupons-20260920`;
 const CHARACTER_CACHE = `project-ebi-characters-${CACHE_VERSION}`;
 const AUDIO_CACHE = `project-ebi-audio-${CACHE_VERSION}`;
 const CACHE_PREFIX = 'project-ebi-';
@@ -38,7 +38,7 @@ const APP_SHELL = [
   './js/sound.js?rev=opening-future-2-production',
   './js/effect.js',
   './js/ui.js',
-  './js/ui.js?rev=hamada-rewards-20260917',
+  './js/ui.js?rev=store-coupons-20260920',
   './js/opening.js',
   './js/opening.js?rev=opening-future-2-production',
   './js/ar.js',
